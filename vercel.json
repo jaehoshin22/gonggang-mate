@@ -1,0 +1,9 @@
+{
+  "outputDirectory": "public",
+  "functions": {
+    "api/*.py": {
+      "includeFiles": "core/**",
+      "excludeFiles": "{tests,samples,tools}/**"
+    }
+  }
+}

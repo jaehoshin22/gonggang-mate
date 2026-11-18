@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>공강메이트</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>공강메이트</h1>
+    <ol class="steps" id="steps">
+      <li data-step="upload">올리기</li>
+      <li data-step="review">확인</li>
+      <li data-step="result">공강</li>
+    </ol>
+  </header>
+
+  <main>
+    <!-- 1단계: 캡처 올리기 (F3) -->
+    <section id="step-upload" class="step">
+      <p class="lead">내 시간표와 친구들 시간표를 에브리타임에서 캡처해 한 번에 올려 주세요.</p>
+
+      <label class="upload-box" for="file-input">
+        <strong>캡처 추가</strong>
+        <span>여러 장 선택 가능 · 라이트모드 캡처</span>
+        <input id="file-input" type="file" accept="image/*" multiple hidden>
+      </label>
+
+      <ul id="member-cards" class="member-cards"></ul>
+
+      <button id="add-manual" class="btn btn-ghost" type="button">캡처 없이 직접 입력할 사람 추가</button>
+      <p class="note">이미지는 인식에만 쓰고 저장하지 않습니다.</p>
+
+      <div class="bottom-bar">
+        <button id="start-parse" class="btn btn-primary" type="button" disabled>시간표 인식하기</button>
+      </div>
+    </section>
+
+    <!-- 2단계: 인식 결과 확인·수정 (F2) -->
+    <section id="step-review" class="step" hidden>
+      <div id="member-tabs" class="tabs" role="tablist"></div>
+      <div id="review-panel"></div>
+      <p id="review-error" class="error-text" hidden></p>
+      <div class="bottom-bar two">
+        <button class="btn btn-ghost" type="button" data-go="upload">이전</button>
+        <button id="find-free" class="btn btn-primary" type="button">공강 찾기</button>
+      </div>
+    </section>
+
+    <!-- 3단계: 공통 공강 (F4, F5, F6) -->
+    <section id="step-result" class="step" hidden>
+      <div class="chips" id="min-chips" role="radiogroup" aria-label="최소 시간">
+        <button type="button" data-min="30">30분+</button>
+        <button type="button" data-min="60">밥 60분</button>
+        <button type="button" data-min="90">카페 90분</button>
+        <button type="button" data-min="120">2시간+</button>
+      </div>
+      <div id="result-panel"></div>
+      <div class="bottom-bar">
+        <button class="btn btn-ghost" type="button" data-go="review">시간표 수정하기</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
