@@ -191,3 +191,17 @@ select, input[type="time"] {
 .legend .l-partial { background: var(--partial-soft); border: 1.5px dashed var(--partial); }
 
 .loading { padding: 24px 0; text-align: center; color: var(--muted); }
+
+/* 원본 캡처·학기 확인 */
+.source-check {
+  display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center;
+  padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 13px; color: var(--muted);
+}
+.source-check p { margin: 0; }
+.source-check strong { color: var(--text); font-size: 14px; }
+.source-thumb {
+  width: 64px; height: 96px; object-fit: cover; object-position: top;
+  border-radius: 6px; background: var(--surface); cursor: zoom-in;
+}
+.source-thumb.zoom { position: fixed; inset: 0; z-index: 20; width: 100%; height: 100%; object-fit: contain; background: rgba(0,0,0,.85); border-radius: 0; cursor: zoom-out; }

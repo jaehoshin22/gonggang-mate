@@ -46,6 +46,13 @@ const toMin = (t) => {
 const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
 
+// 오늘 날짜로 이번 학기 계산: 1~7월은 1학기, 8~12월은 2학기 (8월부터 2학기 수강신청)
+function currentSemester(now = new Date()) {
+  const year = now.getFullYear();
+  const term = now.getMonth() + 1 <= 7 ? 1 : 2;
+  return `${year}년 ${term}학기`;
+}
+
 function getMember(id) {
   return state.members.find((m) => m.id === id);
 }
@@ -284,6 +291,21 @@ function renderReview() {
   if (!m) {
     panel.append(el('p', { class: 'empty', text: '먼저 시간표를 추가해 주세요.' }));
     return;
+  }
+
+  // 원본 캡처와 학기 확인 안내 (지난 학기 캡처를 잘못 올리는 경우 대비)
+  if (m.preview) {
+    panel.append(el('div', { class: 'source-check' }, [
+      el('img', {
+        class: 'source-thumb', src: m.preview, alt: `${m.name} 원본 캡처`,
+        onclick: (e) => e.target.classList.toggle('zoom'),  // 눌러서 크게 보기
+      }),
+      el('p', {}, [
+        el('strong', { text: `${currentSemester()} 시간표가 맞나요?` }),
+        el('br'),
+        '캡처 위쪽 학기 탭을 확인해 주세요. 다른 학기라면 1단계에서 이 캡처를 지우고 다시 올려 주세요.',
+      ]),
+    ]));
   }
 
   if (m.status === 'error') {
