@@ -4,14 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
+  <meta property="og:title" content="공강메이트">
+  <meta property="og:description" content="링크에 각자 에브리타임 시간표 캡처를 올리면 같이 비는 공강을 찾아 줘요.">
   <title>공강메이트</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>공강메이트</h1>
-    <ol class="steps" id="steps">
+    <h1><a href="/" class="home-link">공강메이트</a></h1>
+    <ol class="steps" id="steps" hidden>
       <li data-step="upload">올리기</li>
       <li data-step="review">확인</li>
       <li data-step="result">공강</li>
@@ -19,8 +21,63 @@
   </header>
 
   <main>
-    <!-- 1단계: 캡처 올리기 (F3) -->
-    <section id="step-upload" class="step">
+    <!-- 첫 화면 -->
+    <section id="step-home" class="step" hidden>
+      <div class="hero">
+        <h2>친구들과 겹치는 공강, 링크 하나로 찾기</h2>
+        <p>그룹을 만들어 카톡방에 링크를 올리면, 각자 에브리타임 시간표 캡처를 올리는 대로 같이 비는 시간이 보여요.</p>
+      </div>
+      <label class="field">
+        <span>그룹 이름 (선택)</span>
+        <input id="group-name" maxlength="30" placeholder="예: 소융 밥약">
+      </label>
+      <button id="create-group" class="btn btn-primary" type="button">그룹 만들고 링크 받기</button>
+      <p id="home-error" class="error-text" hidden></p>
+      <div class="divider"><span>또는</span></div>
+      <button class="btn btn-ghost" type="button" data-go="upload">혼자 여러 장 올려서 비교하기</button>
+      <p class="note">캡처 이미지는 인식에만 쓰고 저장하지 않습니다. 그룹에는 이름과 수업 시간만 저장됩니다.</p>
+    </section>
+
+    <!-- 그룹 화면 (F7) -->
+    <section id="step-group" class="step" hidden>
+      <div id="group-head" class="group-head"></div>
+      <div id="share-box" class="share-box"></div>
+      <div id="my-action"></div>
+      <div class="chips" data-chips role="radiogroup" aria-label="최소 시간">
+        <button type="button" data-min="30">30분+</button>
+        <button type="button" data-min="60">밥 60분</button>
+        <button type="button" data-min="90">카페 90분</button>
+        <button type="button" data-min="120">2시간+</button>
+      </div>
+      <div id="group-result"></div>
+      <h2 class="section-title">참여한 사람</h2>
+      <ul id="group-members" class="group-members"></ul>
+      <p class="note" id="group-updated"></p>
+    </section>
+
+    <!-- 그룹에 내 시간표 올리기 -->
+    <section id="step-join" class="step" hidden>
+      <h2 class="page-title" id="join-title">내 시간표 올리기</h2>
+      <label class="field">
+        <span>내 이름</span>
+        <input id="join-name" maxlength="20" placeholder="친구들이 알아볼 이름">
+      </label>
+      <label class="upload-box" for="join-file">
+        <strong id="join-file-label">내 시간표 캡처 선택</strong>
+        <span>에브리타임 시간표 화면 · 라이트·다크모드 모두 가능</span>
+        <input id="join-file" type="file" accept="image/*" hidden>
+      </label>
+      <img id="join-preview" class="join-preview" alt="선택한 캡처" hidden>
+      <p id="join-error" class="error-text" hidden></p>
+      <div id="join-extra"></div>
+      <div class="bottom-bar two">
+        <button class="btn btn-ghost" type="button" data-go="group">취소</button>
+        <button id="join-next" class="btn btn-primary" type="button">인식하기</button>
+      </div>
+    </section>
+
+    <!-- 혼자 비교 1단계: 캡처 올리기 (F3) -->
+    <section id="step-upload" class="step" hidden>
       <p class="lead">내 시간표와 친구들 시간표를 에브리타임에서 캡처해 한 번에 올려 주세요.</p>
 
       <label class="upload-box" for="file-input">
@@ -39,20 +96,20 @@
       </div>
     </section>
 
-    <!-- 2단계: 인식 결과 확인·수정 (F2) -->
+    <!-- 인식 결과 확인·수정 (F2) — 혼자 비교·그룹 공용 -->
     <section id="step-review" class="step" hidden>
       <div id="member-tabs" class="tabs" role="tablist"></div>
       <div id="review-panel"></div>
-      <p id="review-error" class="error-text" hidden></p>
+      <div id="review-error" class="review-error" hidden></div>
       <div class="bottom-bar two">
-        <button class="btn btn-ghost" type="button" data-go="upload">이전</button>
-        <button id="find-free" class="btn btn-primary" type="button">공강 찾기</button>
+        <button id="review-back" class="btn btn-ghost" type="button">이전</button>
+        <button id="review-next" class="btn btn-primary" type="button">공강 찾기</button>
       </div>
     </section>
 
-    <!-- 3단계: 공통 공강 (F4, F5, F6) -->
+    <!-- 혼자 비교 3단계: 공통 공강 (F4, F5, F6) -->
     <section id="step-result" class="step" hidden>
-      <div class="chips" id="min-chips" role="radiogroup" aria-label="최소 시간">
+      <div class="chips" data-chips role="radiogroup" aria-label="최소 시간">
         <button type="button" data-min="30">30분+</button>
         <button type="button" data-min="60">밥 60분</button>
         <button type="button" data-min="90">카페 90분</button>

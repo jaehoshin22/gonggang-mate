@@ -6,17 +6,24 @@ const DAY_LABEL = { MON: '월', TUE: '화', WED: '수', THU: '목', FRI: '금', 
 const GRID_START = 9 * 60;
 const GRID_END = 18 * 60;
 const MAX_UPLOAD = 4 * 1024 * 1024;
+const REFRESH_MS = 15000; // 그룹 화면 자동 새로고침 간격
 const PALETTE = ['#f28c8c', '#82b4f0', '#8ccda0', '#f5be6e', '#b496e1', '#6ec8c8', '#f0a0c8', '#c8be78'];
+const SOLO_STEPS = ['upload', 'review', 'result'];
 
 // ---- 상태 ----------------------------------------------------------------
 const state = {
-  step: 'upload',
-  members: [],      // {id, name, file, preview, status, error, warnings, classes, gridStart}
+  mode: 'solo',     // 'solo' 혼자 여러 장 비교 | 'group' 링크로 각자 올리기 (F7)
+  step: 'home',
+  members: [],      // 확인 화면에서 다루는 시간표 {id, name, file, preview, status, error, warnings, classes, gridStart}
   activeId: null,
   minMinutes: 60,
   result: null,
+  group: null,      // {id, name, members: [{id, name, classes}]}
+  groupResult: null,
+  joinFile: null,
 };
 let nextId = 1;
+let refreshTimer = null;
 
 // ---- 유틸 ----------------------------------------------------------------
 const $ = (sel) => document.querySelector(sel);
@@ -45,6 +52,7 @@ const toMin = (t) => {
 };
 const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
+const errText = (err) => (err instanceof TypeError ? '서버에 연결하지 못했습니다.' : err.message);
 
 // 오늘 날짜로 이번 학기 계산: 1~7월은 1학기, 8~12월은 2학기 (8월부터 2학기 수강신청)
 function currentSemester(now = new Date()) {
@@ -57,44 +65,85 @@ function getMember(id) {
   return state.members.find((m) => m.id === id);
 }
 
-function newClass(member) {
+function newMember({ name = '', file = null, classes = [] } = {}) {
   return {
     id: nextId++,
-    day: 'MON',
-    start: '09:00',
-    end: '10:15',
-    color: PALETTE[member.classes.length % PALETTE.length],
+    name,
+    file,
+    preview: file ? URL.createObjectURL(file) : null,
+    status: file ? 'idle' : 'manual',
+    error: null,
+    warnings: [],
+    classes: classes.map((c) => ({ ...c, id: nextId++ })),
+    gridStart: 9,
   };
+}
+
+function newClass(member) {
+  return { id: nextId++, day: 'MON', start: '09:00', end: '10:15', color: PALETTE[member.classes.length % PALETTE.length] };
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json();
+  if (!data.ok) {
+    const err = new Error(data.error.message);
+    err.code = data.error.code;
+    throw err;
+  }
+  return data;
+}
+
+const postJSON = (path, body) => api(path, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+
+// 내가 이 그룹에 올린 멤버 ID는 이 기기에만 기억한다 (로그인 대신)
+const mineKey = (gid) => `gongang:group:${gid}`;
+function getMine(gid) {
+  try { return JSON.parse(localStorage.getItem(mineKey(gid))); } catch { return null; }
+}
+function setMine(gid, value) {
+  try {
+    if (value) localStorage.setItem(mineKey(gid), JSON.stringify(value));
+    else localStorage.removeItem(mineKey(gid));
+  } catch { /* 저장 불가 브라우저는 무시 */ }
 }
 
 // ---- 화면 전환 -------------------------------------------------------------
 function go(step) {
   state.step = step;
-  for (const name of ['upload', 'review', 'result']) {
-    $(`#step-${name}`).hidden = name !== step;
-  }
-  const order = ['upload', 'review', 'result'];
-  document.querySelectorAll('#steps li').forEach((li) => {
-    const i = order.indexOf(li.dataset.step);
+  document.querySelectorAll('main > .step').forEach((s) => { s.hidden = s.id !== `step-${step}`; });
+  const steps = $('#steps');
+  steps.hidden = !(state.mode === 'solo' && SOLO_STEPS.includes(step));
+  steps.querySelectorAll('li').forEach((li) => {
     li.classList.toggle('active', li.dataset.step === step);
-    li.classList.toggle('done', i < order.indexOf(step));
+    li.classList.toggle('done', SOLO_STEPS.indexOf(li.dataset.step) < SOLO_STEPS.indexOf(step));
   });
   if (step === 'upload') renderUpload();
   if (step === 'review') renderReview();
+  if (step === 'group') renderGroup();
+  if (step === 'join') renderJoin();
+  syncChips();
+  clearInterval(refreshTimer);
+  if (step === 'group') {
+    refreshTimer = setInterval(() => { if (!document.hidden) loadGroup(true); }, REFRESH_MS);
+  }
   window.scrollTo(0, 0);
 }
 
 // ---- 시간표 그리드 컴포넌트 --------------------------------------------------
 // blocks: [{day, start, end, kind: 'class'|'free'|'partial', color, label}]
 function renderTimetable(blocks, days = DAYS.slice(0, 5)) {
-  const grid = el('div', { class: 'tt', style: { '--days': days.length } });
+  const grid = el('div', { class: 'tt' });
   grid.style.setProperty('--days', days.length);
   grid.append(el('div', { class: 'tt-head' }));
   for (const d of days) grid.append(el('div', { class: 'tt-head', text: DAY_LABEL[d] }));
 
+  const total = GRID_END - GRID_START;
   const times = el('div', { class: 'tt-times' });
   for (let h = 9; h < 18; h++) {
-    times.append(el('span', { text: String(h), style: { top: `${((h * 60 - GRID_START) / (GRID_END - GRID_START)) * 100}%` } }));
+    times.append(el('span', { text: String(h), style: { top: `${((h * 60 - GRID_START) / total) * 100}%` } }));
   }
   grid.append(times);
 
@@ -104,7 +153,6 @@ function renderTimetable(blocks, days = DAYS.slice(0, 5)) {
       const s = Math.max(toMin(b.start), GRID_START);
       const e = Math.min(toMin(b.end), GRID_END);
       if (!(s < e)) continue;
-      const total = GRID_END - GRID_START;
       col.append(el('div', {
         class: `tt-block ${b.kind || 'class'}`,
         style: {
@@ -120,63 +168,7 @@ function renderTimetable(blocks, days = DAYS.slice(0, 5)) {
   return grid;
 }
 
-// ---- 1단계: 업로드 (F3) ------------------------------------------------------
-function addMember(file) {
-  const index = state.members.length;
-  state.members.push({
-    id: nextId++,
-    name: index === 0 ? '나' : `친구${index}`,
-    file: file || null,
-    preview: file ? URL.createObjectURL(file) : null,
-    status: file ? 'idle' : 'manual',
-    error: null,
-    warnings: [],
-    classes: [],
-    gridStart: 9,
-  });
-}
-
-function removeMember(id) {
-  const m = getMember(id);
-  if (m && m.preview) URL.revokeObjectURL(m.preview);
-  state.members = state.members.filter((x) => x.id !== id);
-  renderUpload();
-}
-
-const STATUS_TEXT = {
-  idle: '인식 전',
-  parsing: '인식 중...',
-  done: '인식 완료',
-  error: '인식 실패 · 직접 입력 가능',
-  manual: '직접 입력',
-};
-
-function renderUpload() {
-  const list = $('#member-cards');
-  list.replaceChildren();
-  for (const m of state.members) {
-    list.append(el('li', { class: 'member-card' }, [
-      m.preview
-        ? el('img', { class: 'thumb', src: m.preview, alt: `${m.name} 시간표 캡처` })
-        : el('div', { class: 'thumb', text: '직접' }),
-      el('div', {}, [
-        el('input', {
-          value: m.name,
-          'aria-label': '이름',
-          maxlength: 12,
-          oninput: (e) => { m.name = e.target.value; },
-        }),
-        el('div', { class: `status ${m.status}`, text: m.error || STATUS_TEXT[m.status] }),
-      ]),
-      el('button', { class: 'icon-btn danger', type: 'button', text: '삭제', onclick: () => removeMember(m.id) }),
-    ]));
-  }
-  const pending = state.members.filter((m) => m.file && m.status !== 'done').length;
-  const btn = $('#start-parse');
-  btn.disabled = state.members.length === 0;
-  btn.textContent = pending ? `시간표 인식하기 (${pending}장)` : '다음';
-}
-
+// ---- 이미지 인식 (F1) --------------------------------------------------------
 // Vercel 요청 한도를 넘으면 브라우저에서 JPEG로 다시 저장
 async function prepareUpload(file) {
   if (file.size <= MAX_UPLOAD) return file;
@@ -191,47 +183,419 @@ async function prepareUpload(file) {
 async function parseMember(m) {
   m.status = 'parsing';
   m.error = null;
-  renderUpload();
   try {
     const body = await prepareUpload(m.file);
-    const res = await fetch('/api/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': body.type || 'application/octet-stream' },
-      body,
+    const data = await api('/api/parse', {
+      method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body,
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error.message);
     m.classes = data.classes.map((c) => ({ ...c, id: nextId++ }));
     m.warnings = data.warnings;
     m.status = 'done';
   } catch (err) {
     m.status = 'error';
-    m.error = err instanceof TypeError ? '서버에 연결하지 못했습니다.' : err.message;
+    m.error = errText(err);
     m.classes = [];
     m.warnings = [];
   }
+}
+
+// ---- 공강 계산 (F4~F6) ------------------------------------------------------
+async function fetchFree(members) {
+  return postJSON('/api/free', {
+    min_minutes: state.minMinutes,
+    members: members.map((m) => ({
+      name: m.name.trim(),
+      classes: m.classes.map(({ day, start, end }) => ({ day, start, end })),
+    })),
+  });
+}
+
+function syncChips() {
+  document.querySelectorAll('[data-chips] button').forEach((b) => {
+    const on = Number(b.dataset.min) === state.minMinutes;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', on);
+  });
+}
+
+function renderResult(panel, r) {
+  panel.replaceChildren();
+  const showPartial = r.common.length === 0 && r.partial.length > 0;
+  const totalMin = r.common.reduce((sum, s) => sum + s.minutes, 0);
+  panel.append(el('p', {
+    class: 'summary',
+    text: r.common.length
+      ? `${r.member_count}명이 함께 비는 시간 ${r.common.length}개 · 합계 ${Math.floor(totalMin / 60)}시간 ${totalMin % 60}분`
+      : `${r.min_minutes}분 이상 ${r.member_count}명이 모두 비는 시간이 없습니다.`,
+  }));
+
+  const blocks = r.common.map((s) => ({ ...s, kind: 'free', label: s.start }));
+  if (showPartial) {
+    for (const s of r.partial) blocks.push({ ...s, kind: 'partial', label: `${s.missing[0]} 빠짐` });
+  }
+  panel.append(renderTimetable(blocks));
+  panel.append(el('div', { class: 'legend' }, [
+    el('span', {}, [el('i', { class: 'l-free' }), '전원 가능']),
+    showPartial ? el('span', {}, [el('i', { class: 'l-partial' }), `${r.member_count - 1}명 가능`]) : null,
+  ]));
+
+  if (r.common.length) {
+    panel.append(el('h2', { class: 'section-title', text: '전원이 비는 시간' }));
+    panel.append(el('ul', { class: 'slot-list' }, r.common.map((s) => el('li', {}, [
+      el('span', { class: 'time', text: `${s.day_label} ${s.start}–${s.end}` }),
+      el('span', { class: 'sub', text: `${s.minutes}분` }),
+    ]))));
+  }
+
+  if (r.partial.length) {
+    const list = el('ul', { class: 'slot-list partial' }, r.partial.slice(0, 10).map((s) => el('li', {}, [
+      el('span', { class: 'time', text: `${s.day_label} ${s.start}–${s.end} (${s.minutes}분)` }),
+      el('span', { class: 'sub', text: `${r.member_count}명 중 ${r.member_count - 1}명 가능 · ${s.missing[0]} 빠짐` }),
+    ])));
+    if (showPartial) {
+      panel.append(el('h2', { class: 'section-title', text: '차선 시간 (한 명만 빠짐)' }), list);
+    } else {
+      panel.append(el('details', {}, [
+        el('summary', { class: 'section-title', text: `차선 시간도 보기 (${r.partial.length})` }), list,
+      ]));
+    }
+  } else if (!r.common.length && r.member_count >= 3) {
+    panel.append(el('p', { class: 'empty', text: '한 명만 빠지는 시간도 없습니다. 최소 시간을 줄여 보세요.' }));
+  }
+}
+
+// =============================================================================
+// 그룹 모드 (F7): 링크를 카톡방에 공유 -> 각자 자기 시간표를 올림 -> 자동 비교
+// =============================================================================
+function groupLink(gid) {
+  return `${location.origin}/?g=${gid}`;
+}
+
+async function createGroup() {
+  const btn = $('#create-group');
+  const errBox = $('#home-error');
+  btn.disabled = true;
+  errBox.hidden = true;
+  try {
+    const data = await postJSON('/api/group', { action: 'create', name: $('#group-name').value });
+    history.replaceState(null, '', `/?g=${data.group_id}`);
+    state.mode = 'group';
+    state.group = { id: data.group_id, name: '', members: [] };
+    await loadGroup();
+    go('group');
+  } catch (err) {
+    errBox.textContent = errText(err);
+    errBox.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadGroup(silent = false) {
+  const gid = state.group.id;
+  try {
+    const data = await api(`/api/group?g=${encodeURIComponent(gid)}`);
+    state.group = data.group;
+    const mine = getMine(gid);
+    if (mine && !state.group.members.some((m) => m.id === mine.memberId)) setMine(gid, null); // 삭제된 경우
+    state.group.loadedAt = new Date();
+    state.group.error = null;
+    await computeGroupFree();
+  } catch (err) {
+    if (!silent) state.group.error = errText(err);
+  }
+  if (state.step === 'group') renderGroup();
+}
+
+async function computeGroupFree() {
+  const members = state.group.members;
+  state.groupResult = members.length >= 2 ? await fetchFree(members) : null;
+}
+
+function renderGroup() {
+  const g = state.group;
+  const mine = getMine(g.id);
+  $('#group-head').replaceChildren(
+    el('h2', { text: g.name || '공강 그룹' }),
+    el('p', { class: 'sub', text: `${g.members.length}명 참여 · 이 링크를 가진 사람은 누구나 보고 올릴 수 있어요` }),
+  );
+
+  // 링크 공유
+  const link = groupLink(g.id);
+  const copyBtn = el('button', {
+    class: 'btn btn-ghost btn-small', type: 'button', text: '링크 복사',
+    onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        copyBtn.textContent = '복사됨';
+      } catch {
+        linkInput.select();
+        copyBtn.textContent = '길게 눌러 복사';
+      }
+      setTimeout(() => { copyBtn.textContent = '링크 복사'; }, 2000);
+    },
+  });
+  const linkInput = el('input', { class: 'share-link', value: link, readonly: true, 'aria-label': '그룹 링크' });
+  $('#share-box').replaceChildren(
+    el('p', { text: '카톡방에 이 링크를 올려 주세요. 각자 자기 시간표를 올리면 자동으로 비교됩니다.' }),
+    el('div', { class: 'share-row' }, [
+      linkInput,
+      copyBtn,
+      navigator.share ? el('button', {
+        class: 'btn btn-primary btn-small', type: 'button', text: '공유',
+        onclick: () => navigator.share({ title: '공강메이트', text: `${g.name || '공강 그룹'} 공강 맞추기`, url: link }).catch(() => {}),
+      }) : null,
+    ]),
+  );
+
+  // 내 시간표 올리기 / 수정
+  $('#my-action').replaceChildren(el('button', {
+    class: 'btn btn-primary', type: 'button',
+    text: mine ? `내 시간표 수정 (${mine.name})` : '내 시간표 올리기',
+    onclick: () => { state.joinFile = null; go('join'); },
+  }));
+
+  // 결과
+  const panel = $('#group-result');
+  if (g.error) {
+    panel.replaceChildren(el('p', { class: 'error-text', text: g.error }));
+  } else if (g.members.length < 2) {
+    panel.replaceChildren(el('div', { class: 'empty-box', text: g.members.length
+      ? `지금 ${g.members.length}명이 올렸어요. 두 명 이상 올리면 같이 비는 시간이 보여요.`
+      : '아직 아무도 올리지 않았어요. 먼저 내 시간표를 올려 보세요.' }));
+  } else if (state.groupResult) {
+    renderResult(panel, state.groupResult);
+  }
+
+  // 참여자 목록
+  const list = $('#group-members');
+  list.replaceChildren();
+  for (const m of g.members) {
+    const isMine = mine && mine.memberId === m.id;
+    list.append(el('li', {}, [
+      el('span', { class: 'name', text: m.name }),
+      isMine ? el('span', { class: 'badge', text: '나' }) : null,
+      el('span', { class: 'sub', text: `수업 ${m.classes.length}개` }),
+      isMine ? leaveButton(m) : null,
+    ]));
+  }
+  if (!g.members.length) list.append(el('li', { class: 'empty', text: '아직 없습니다.' }));
+  $('#group-updated').textContent = g.loadedAt
+    ? `${g.loadedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 기준 · 15초마다 자동 갱신`
+    : '';
+}
+
+// 두 번 눌러야 지워지는 버튼 (실수 방지, 브라우저 확인창 대신)
+function leaveButton(m) {
+  const btn = el('button', { class: 'icon-btn danger', type: 'button', text: '빼기' });
+  btn.addEventListener('click', async () => {
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = '정말 뺄까요?';
+      setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '빼기'; }, 3000);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await postJSON('/api/group', { action: 'delete', group_id: state.group.id, member_id: m.id });
+      setMine(state.group.id, null);
+      await loadGroup();
+    } catch (err) {
+      btn.textContent = errText(err);
+    }
+  });
+  return btn;
+}
+
+// ---- 그룹: 내 시간표 올리기 -----------------------------------------------------
+function renderJoin() {
+  const mine = getMine(state.group.id);
+  const saved = mine && state.group.members.find((m) => m.id === mine.memberId);
+  $('#join-title').textContent = saved ? '내 시간표 수정' : '내 시간표 올리기';
+  const nameInput = $('#join-name');
+  if (!nameInput.value && saved) nameInput.value = saved.name;
+  $('#join-error').hidden = true;
+
+  const preview = $('#join-preview');
+  if (state.joinFile) {
+    preview.src = URL.createObjectURL(state.joinFile);
+    preview.hidden = false;
+    $('#join-file-label').textContent = '다른 캡처로 바꾸기';
+  } else {
+    preview.hidden = true;
+    $('#join-file-label').textContent = '내 시간표 캡처 선택';
+  }
+  $('#join-next').textContent = state.joinFile ? '인식하기' : '캡처를 선택해 주세요';
+  $('#join-next').disabled = !state.joinFile;
+
+  const extra = $('#join-extra');
+  extra.replaceChildren(el('button', {
+    class: 'btn btn-ghost', type: 'button',
+    text: saved ? '저장된 시간표 그대로 수정하기' : '캡처 없이 직접 입력하기',
+    onclick: () => { if (startReview(saved ? saved.classes : [], false)) go('review'); },
+  }));
+}
+
+function joinName() {
+  const name = $('#join-name').value.trim();
+  if (!name) {
+    const box = $('#join-error');
+    box.textContent = '이름을 먼저 입력해 주세요.';
+    box.hidden = false;
+    $('#join-name').focus();
+  }
+  return name;
+}
+
+function startReview(classes, withFile = true) {
+  const name = joinName();
+  if (!name) return null;
+  const m = newMember({ name, file: withFile ? state.joinFile : null, classes });
+  state.members = [m];
+  state.activeId = m.id;
+  return m;
+}
+
+async function joinParse() {
+  const m = startReview([]);
+  if (!m) return;
+  const btn = $('#join-next');
+  btn.disabled = true;
+  btn.textContent = '인식 중...';
+  await parseMember(m);
+  go('review');
+}
+
+async function saveToGroup(claim = false) {
+  const m = state.members[0];
+  const problem = validateMembers();
+  if (problem) return showReviewError(problem);
+  const gid = state.group.id;
+  const mine = getMine(gid);
+  const btn = $('#review-next');
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+  try {
+    const data = await postJSON('/api/group', {
+      action: 'save',
+      group_id: gid,
+      member_id: mine ? mine.memberId : null,
+      name: m.name.trim(),
+      classes: m.classes.map(({ day, start, end, color }) => ({ day, start, end, color })),
+      claim,
+    });
+    setMine(gid, { memberId: data.member_id, name: m.name.trim() });
+    $('#join-name').value = '';
+    await loadGroup();
+    go('group');
+  } catch (err) {
+    if (err.code === 'NAME_TAKEN' && !mine) showNameConflict(m.name.trim());
+    else showReviewError(err.code === 'NAME_TAKEN' ? `'${m.name.trim()}'은(는) 이미 다른 사람이 쓰는 이름입니다.` : errText(err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '그룹에 저장';
+  }
+}
+
+// 같은 이름이 이미 있을 때: 본인(다른 기기에서 올렸던 나)인지, 다른 사람인지 묻는다
+function showNameConflict(name) {
+  const box = $('#review-error');
+  box.replaceChildren(
+    el('p', { text: `이 그룹에 '${name}'이(가) 이미 있습니다.` }),
+    el('div', { class: 'conflict-actions' }, [
+      el('button', {
+        class: 'btn btn-primary btn-small', type: 'button', text: `내가 그 ${name}이에요 · 내 시간표로 바꾸기`,
+        onclick: () => saveToGroup(true),
+      }),
+      el('button', {
+        class: 'btn btn-ghost btn-small', type: 'button', text: '다른 사람이에요 · 이름 바꾸기',
+        onclick: () => {
+          const input = $('#review-name');
+          input.focus();
+          input.select();
+          box.replaceChildren(el('p', { text: '예: 재호B, 신재호처럼 구분되는 이름으로 바꾼 뒤 다시 저장해 주세요.' }));
+        },
+      }),
+    ]),
+  );
+  box.hidden = false;
+  box.scrollIntoView({ block: 'center' });
+}
+
+// =============================================================================
+// 혼자 비교 모드: 한 사람이 여러 장을 올린다
+// =============================================================================
+function addSoloMember(file) {
+  const index = state.members.length;
+  state.members.push(newMember({ name: index === 0 ? '나' : `친구${index}`, file }));
+}
+
+function removeMember(id) {
+  const m = getMember(id);
+  if (m && m.preview) URL.revokeObjectURL(m.preview);
+  state.members = state.members.filter((x) => x.id !== id);
   renderUpload();
+}
+
+const STATUS_TEXT = {
+  idle: '인식 전', parsing: '인식 중...', done: '인식 완료',
+  error: '인식 실패 · 직접 입력 가능', manual: '직접 입력',
+};
+
+function renderUpload() {
+  const list = $('#member-cards');
+  list.replaceChildren();
+  for (const m of state.members) {
+    list.append(el('li', { class: 'member-card' }, [
+      m.preview
+        ? el('img', { class: 'thumb', src: m.preview, alt: `${m.name} 시간표 캡처` })
+        : el('div', { class: 'thumb', text: '직접' }),
+      el('div', {}, [
+        el('input', { value: m.name, 'aria-label': '이름', maxlength: 20, oninput: (e) => { m.name = e.target.value; } }),
+        el('div', { class: `status ${m.status}`, text: m.error || STATUS_TEXT[m.status] }),
+      ]),
+      el('button', { class: 'icon-btn danger', type: 'button', text: '삭제', onclick: () => removeMember(m.id) }),
+    ]));
+  }
+  const pending = state.members.filter((m) => m.file && m.status !== 'done').length;
+  const btn = $('#start-parse');
+  btn.disabled = state.members.length === 0;
+  btn.textContent = pending ? `시간표 인식하기 (${pending}장)` : '다음';
 }
 
 async function parseAll() {
   const btn = $('#start-parse');
   btn.disabled = true;
   const targets = state.members.filter((m) => m.file && m.status !== 'done');
+  targets.forEach((m) => { m.status = 'parsing'; });
+  renderUpload();
   await Promise.all(targets.map(parseMember)); // 한 장씩 따로 요청, 동시에 보냄
   state.activeId = state.members[0].id;
   go('review');
 }
 
-// ---- 2단계: 확인·수정 (F2) ----------------------------------------------------
+async function findFreeSolo() {
+  const panel = $('#result-panel');
+  panel.replaceChildren(el('p', { class: 'loading', text: '공강을 찾는 중...' }));
+  try {
+    state.result = await fetchFree(state.members);
+    renderResult(panel, state.result);
+  } catch (err) {
+    panel.replaceChildren(el('p', { class: 'error-text', text: errText(err) }));
+  }
+}
+
+// =============================================================================
+// 확인·수정 화면 (F2) — 두 모드 공용
+// =============================================================================
 function renderTabs() {
   const tabs = $('#member-tabs');
   tabs.replaceChildren();
+  tabs.hidden = state.members.length < 2;
   for (const m of state.members) {
     const needsCheck = m.warnings.length > 0 || m.status === 'error';
     tabs.append(el('button', {
-      type: 'button',
-      role: 'tab',
-      class: m.id === state.activeId ? 'active' : '',
+      type: 'button', role: 'tab', class: m.id === state.activeId ? 'active' : '',
       onclick: () => { state.activeId = m.id; renderReview(); },
     }, [m.name || '이름 없음', needsCheck ? el('span', { class: 'dot', title: '확인 필요' }) : null]));
   }
@@ -265,11 +629,10 @@ function classRow(m, c) {
     row.classList.toggle('invalid', !isValidClass(c));
     renderPreview(m);
   };
-  const daySelect = el('select', { 'aria-label': '요일', onchange: update('day') },
-    DAYS.map((d) => el('option', { value: d, selected: d === c.day, text: `${DAY_LABEL[d]}요일` })));
   row.append(
-    el('span', { class: 'swatch', style: { background: c.color } }),
-    daySelect,
+    el('span', { class: 'swatch', style: { background: c.color || PALETTE[0] } }),
+    el('select', { 'aria-label': '요일', onchange: update('day') },
+      DAYS.map((d) => el('option', { value: d, selected: d === c.day, text: `${DAY_LABEL[d]}요일` }))),
     el('input', { class: 't-start', type: 'time', step: 300, value: c.start, 'aria-label': '시작', onchange: update('start') }),
     el('span', { class: 'sep', text: '~' }),
     el('input', { class: 't-end', type: 'time', step: 300, value: c.end, 'aria-label': '종료', onchange: update('end') }),
@@ -287,23 +650,35 @@ function renderReview() {
   const panel = $('#review-panel');
   panel.replaceChildren();
   $('#review-error').hidden = true;
+  const group = state.mode === 'group';
+  $('#review-next').textContent = group ? '그룹에 저장' : '공강 찾기';
+  $('#review-back').textContent = group ? '이전' : '이전';
   const m = getMember(state.activeId);
   if (!m) {
     panel.append(el('p', { class: 'empty', text: '먼저 시간표를 추가해 주세요.' }));
     return;
   }
 
+  // 이름 (원본 캡처 위쪽 이름을 보며 고칠 수 있게 맨 위에)
+  panel.append(el('label', { class: 'field' }, [
+    el('span', { text: group ? '내 이름' : '이름' }),
+    el('input', {
+      id: 'review-name', value: m.name, maxlength: 20, placeholder: '이름',
+      oninput: (e) => { m.name = e.target.value; if (!group) renderTabs(); },
+    }),
+  ]));
+
   // 원본 캡처와 학기 확인 안내 (지난 학기 캡처를 잘못 올리는 경우 대비)
   if (m.preview) {
     panel.append(el('div', { class: 'source-check' }, [
       el('img', {
         class: 'source-thumb', src: m.preview, alt: `${m.name} 원본 캡처`,
-        onclick: (e) => e.target.classList.toggle('zoom'),  // 눌러서 크게 보기
+        onclick: (e) => e.target.classList.toggle('zoom'), // 눌러서 크게 보기
       }),
       el('p', {}, [
         el('strong', { text: `${currentSemester()} 시간표가 맞나요?` }),
         el('br'),
-        '캡처 위쪽 학기 탭을 확인해 주세요. 다른 학기라면 1단계에서 이 캡처를 지우고 다시 올려 주세요.',
+        '캡처 위쪽 학기 탭을 확인해 주세요. 다른 학기라면 이전 화면에서 캡처를 다시 골라 주세요.',
       ]),
     ]));
   }
@@ -312,9 +687,7 @@ function renderReview() {
     panel.append(el('div', { class: 'alert error', text: `${m.error} 아래에서 수업을 직접 추가할 수 있습니다.` }));
   }
   if (m.warnings.length) {
-    panel.append(el('div', { class: 'alert' }, [
-      el('ul', {}, m.warnings.map((w) => el('li', { text: w.message }))),
-    ]));
+    panel.append(el('div', { class: 'alert' }, [el('ul', {}, m.warnings.map((w) => el('li', { text: w.message })))]));
   }
 
   panel.append(el('div', { id: 'review-preview' }));
@@ -338,17 +711,18 @@ function renderReview() {
   ]));
 
   const list = el('ul', { class: 'class-list' });
-  if (!m.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없습니다. 이 사람은 모든 요일이 비어 있는 것으로 계산합니다.' }));
+  if (!m.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없습니다. 모든 요일이 비어 있는 것으로 계산합니다.' }));
   for (const c of m.classes) list.append(classRow(m, c));
   panel.append(list);
 
   renderPreview(m);
 }
 
-function validateBeforeFree() {
+function validateMembers() {
   const names = state.members.map((m) => m.name.trim());
   if (!state.members.length) return '시간표를 한 장 이상 추가해 주세요.';
-  if (names.some((n) => !n)) return '이름이 비어 있는 사람이 있습니다. 1단계에서 이름을 적어 주세요.';
+  if (names.some((n) => !n)) return '이름이 비어 있습니다. 이름을 적어 주세요.';
+  if (names.some((n) => n.length > 20)) return '이름은 20자 이하로 적어 주세요.';
   const dup = names.find((n, i) => names.indexOf(n) !== i);
   if (dup) return `이름 '${dup}'이(가) 중복되었습니다.`;
   for (const m of state.members) {
@@ -360,124 +734,72 @@ function validateBeforeFree() {
   return null;
 }
 
-// ---- 3단계: 공강 결과 (F4, F5, F6) --------------------------------------------
-async function findFree() {
-  const panel = $('#result-panel');
-  panel.replaceChildren(el('p', { class: 'loading', text: '공강을 찾는 중...' }));
-  document.querySelectorAll('#min-chips button').forEach((b) => {
-    b.classList.toggle('active', Number(b.dataset.min) === state.minMinutes);
-    b.setAttribute('aria-checked', Number(b.dataset.min) === state.minMinutes);
-  });
-  try {
-    const res = await fetch('/api/free', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        min_minutes: state.minMinutes,
-        members: state.members.map((m) => ({
-          name: m.name.trim(),
-          classes: m.classes.map(({ day, start, end }) => ({ day, start, end })),
-        })),
-      }),
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error.message);
-    state.result = data;
-    renderResult();
-  } catch (err) {
-    panel.replaceChildren(el('p', {
-      class: 'error-text',
-      text: err instanceof TypeError ? '서버에 연결하지 못했습니다.' : err.message,
-    }));
-  }
-}
-
-function renderResult() {
-  const r = state.result;
-  const panel = $('#result-panel');
-  panel.replaceChildren();
-  const showPartial = r.common.length === 0 && r.partial.length > 0;
-
-  const totalMin = r.common.reduce((sum, s) => sum + s.minutes, 0);
-  panel.append(el('p', {
-    class: 'summary',
-    text: r.common.length
-      ? `${r.member_count}명이 함께 비는 시간 ${r.common.length}개 · 합계 ${Math.floor(totalMin / 60)}시간 ${totalMin % 60}분`
-      : `${r.min_minutes}분 이상 ${r.member_count}명이 모두 비는 시간이 없습니다.`,
-  }));
-
-  const blocks = r.common.map((s) => ({ ...s, kind: 'free', label: `${s.start}` }));
-  if (showPartial) {
-    for (const s of r.partial) blocks.push({ ...s, kind: 'partial', label: `${s.missing[0]} 빠짐` });
-  }
-  panel.append(renderTimetable(blocks));
-  panel.append(el('div', { class: 'legend' }, [
-    el('span', {}, [el('i', { class: 'l-free' }), '전원 가능']),
-    showPartial ? el('span', {}, [el('i', { class: 'l-partial' }), `${r.member_count - 1}명 가능`]) : null,
-  ]));
-
-  if (r.common.length) {
-    panel.append(el('h2', { class: 'section-title', text: '전원이 비는 시간' }));
-    panel.append(el('ul', { class: 'slot-list' }, r.common.map((s) => el('li', {}, [
-      el('span', { class: 'time', text: `${s.day_label} ${s.start}–${s.end}` }),
-      el('span', { class: 'sub', text: `${s.minutes}분` }),
-    ]))));
-  }
-
-  if (r.partial.length) {
-    const list = el('ul', { class: 'slot-list partial' }, r.partial.slice(0, 10).map((s) => el('li', {}, [
-      el('span', { class: 'time', text: `${s.day_label} ${s.start}–${s.end} (${s.minutes}분)` }),
-      el('span', { class: 'sub', text: `${r.member_count}명 중 ${r.member_count - 1}명 가능 · ${s.missing[0]} 빠짐` }),
-    ])));
-    if (showPartial) {
-      panel.append(el('h2', { class: 'section-title', text: '차선 시간 (한 명만 빠짐)' }), list);
-    } else {
-      panel.append(el('details', {}, [
-        el('summary', { class: 'section-title', text: `차선 시간도 보기 (${r.partial.length})` }),
-        list,
-      ]));
-    }
-  } else if (!r.common.length && r.member_count >= 3) {
-    panel.append(el('p', { class: 'empty', text: '한 명만 빠지는 시간도 없습니다. 최소 시간을 줄여 보세요.' }));
-  }
+function showReviewError(message) {
+  renderReview();
+  const box = $('#review-error');
+  box.replaceChildren(el('p', { text: message }));
+  box.hidden = false;
 }
 
 // ---- 이벤트 연결 -----------------------------------------------------------
+$('#create-group').addEventListener('click', createGroup);
+
 $('#file-input').addEventListener('change', (e) => {
-  for (const file of e.target.files) addMember(file);
+  for (const file of e.target.files) addSoloMember(file);
   e.target.value = '';
   renderUpload();
 });
-
-$('#add-manual').addEventListener('click', () => {
-  addMember(null);
-  renderUpload();
-});
-
+$('#add-manual').addEventListener('click', () => { addSoloMember(null); renderUpload(); });
 $('#start-parse').addEventListener('click', parseAll);
 
-$('#find-free').addEventListener('click', () => {
-  const problem = validateBeforeFree();
-  if (problem) {
-    renderReview();
-    const box = $('#review-error');
-    box.textContent = problem;
-    box.hidden = false;
+$('#join-file').addEventListener('change', (e) => {
+  state.joinFile = e.target.files[0] || null;
+  e.target.value = '';
+  renderJoin();
+});
+$('#join-next').addEventListener('click', joinParse);
+
+$('#review-back').addEventListener('click', () => go(state.mode === 'group' ? 'join' : 'upload'));
+$('#review-next').addEventListener('click', () => {
+  if (state.mode === 'group') {
+    saveToGroup();
     return;
   }
+  const problem = validateMembers();
+  if (problem) return showReviewError(problem);
   go('result');
-  findFree();
+  findFreeSolo();
 });
 
-$('#min-chips').addEventListener('click', (e) => {
+document.querySelectorAll('[data-chips]').forEach((chips) => chips.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-min]');
   if (!btn) return;
   state.minMinutes = Number(btn.dataset.min);
-  findFree();
-});
+  syncChips();
+  if (state.step === 'group') {
+    await computeGroupFree();
+    renderGroup();
+  } else {
+    findFreeSolo();
+  }
+}));
 
 document.querySelectorAll('[data-go]').forEach((btn) => {
-  btn.addEventListener('click', () => go(btn.dataset.go));
+  btn.addEventListener('click', () => {
+    if (btn.dataset.go === 'upload') state.mode = 'solo';
+    go(btn.dataset.go);
+  });
 });
 
-go('upload');
+// ---- 시작: 링크(?g=)로 들어왔으면 그룹 화면, 아니면 첫 화면 ---------------------------
+(async function start() {
+  const gid = new URLSearchParams(location.search).get('g');
+  if (!gid) {
+    go('home');
+    return;
+  }
+  state.mode = 'group';
+  state.group = { id: gid, name: '', members: [] };
+  go('group');
+  await loadGroup();
+})();

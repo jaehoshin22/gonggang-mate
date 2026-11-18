@@ -1,6 +1,9 @@
 # 공강메이트
 
-에브리타임 시간표 캡처 여러 장을 올리면, 모두가 함께 비는 공강 시간을 찾아주는 모바일 웹앱.
+에브리타임 시간표 캡처로 친구들과 함께 비는 공강 시간을 찾아주는 모바일 웹앱.
+
+- **그룹 링크 (F7):** 그룹을 만들어 카톡방에 링크를 올리면, 각자 자기 시간표 캡처를 올리는 대로 공통 공강이 자동으로 보인다.
+- **혼자 비교:** 한 사람이 친구들 캡처까지 여러 장 올려서 바로 비교한다.
 
 ## 실행
 
@@ -15,7 +18,9 @@ python dev_server.py           # http://localhost:8000
 ## 테스트와 측정
 
 ```bash
-python -m pytest               # 단위 테스트 (공강 계산, 이미지 인식, API)
+python -m pytest               # 단위 테스트 (공강 계산, 이미지 인식, API, 그룹)
+# 그룹 SQL까지 실제 PostgreSQL로 검증하려면 (psycopg 필요)
+PG_TEST_DSN="host=localhost user=postgres dbname=postgres" python -m pytest tests/test_group.py
 python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정 (비기능 요구사항)
 ```
 
@@ -27,6 +32,38 @@ python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정
 2. `vercel.json` 설정대로 `public/` 은 정적 파일, `api/*.py` 는 Python 함수가 된다.
 3. 첫 배포 후 `/api/parse` 가 `ModuleNotFoundError: core` 를 내면 `vercel.json` 의 `includeFiles` 설정을 확인한다.
 
+## 그룹 기능 설정 (Supabase)
+
+1. supabase.com 에서 새 프로젝트를 만든다 (Region: Northeast Asia (Seoul)).
+2. SQL Editor 에 `supabase/schema.sql` 전체를 붙여 넣고 Run.
+3. 두 값을 복사한다.
+   - Project URL (`https://xxxx.supabase.co`)
+   - Secret key (`sb_secret_...`). 예전 프로젝트라면 Legacy 탭의 `service_role` 키도 동작한다.
+     **브라우저 코드나 GitHub에 절대 넣지 않는다.**
+4. Vercel → 프로젝트 → Settings → Environment Variables 에 추가하고 다시 배포한다.
+   - `SUPABASE_URL` = Project URL
+   - `SUPABASE_SERVICE_KEY` = Secret key (`sb_secret_...`)
+5. 로컬에서는 환경변수가 없으면 메모리에 저장한다 (`python dev_server.py`, 서버를 끄면 사라짐).
+
+### 데이터 구조 (10주차 SQL)
+
+```
+groups (id, name, created_at)
+  └─ members (id, group_id → groups, name, updated_at)   UNIQUE(group_id, name)
+       └─ classes (id, member_id → members, day, start_time, end_time, color)
+```
+
+- `get_group(그룹ID)`: `groups LEFT JOIN members LEFT JOIN classes` 로 그룹 전체를 한 번에 조회
+- `save_member(...)`: 멤버 추가·수정과 수업 목록 교체를 한 트랜잭션으로 처리. 같은 이름이면 `NAME_TAKEN`
+- `delete_old_groups(180)`: 180일 지난 그룹 정리
+- 세 테이블 모두 RLS를 켜고 정책을 두지 않아, 공개 키로는 읽고 쓸 수 없다. 서버만 secret 키로 함수를 호출한다.
+
+### 사람 구분 (로그인 없음)
+
+- 그룹은 추측할 수 없는 UUID 링크(`?g=...`)로 구분한다. 링크를 가진 사람만 보고 올릴 수 있다.
+- 내가 올린 멤버 ID는 그 기기의 localStorage 에만 기억해서 "내 시간표 수정"과 "빼기"에 쓴다.
+- 같은 이름이 이미 있으면 "내가 그 사람이에요(덮어쓰기)" / "다른 사람이에요(이름 바꾸기)"를 묻는다.
+
 ## 구조
 
 ```
@@ -34,6 +71,10 @@ public/            화면 (HTML, CSS Grid, 바닐라 JS)
   app.js           업로드(F3) → 확인·수정(F2) → 공강 결과(F4~F6)
 api/parse.py       POST /api/parse  캡처 한 장 → 수업 목록
 api/free.py        POST /api/free   멤버 시간표들 → 공통 공강·차선 시간
+api/group.py       GET/POST /api/group  그룹 만들기·조회·내 시간표 저장·빼기 (F7)
+core/group.py      그룹 요청 검증·처리
+core/store.py      Supabase 호출 / 메모리 저장소
+supabase/schema.sql  테이블·SQL 함수·권한
 core/parser.py     이미지 인식 (Pillow, 규칙 기반)
 core/free.py       공강 계산 (5분 칸 108개, AND 연산)
 core/web.py        요청/응답 처리 (Vercel 함수와 dev_server 공용)
@@ -63,6 +104,15 @@ tools/             시연 샘플 생성, 정확도 측정
 ```
 
 응답의 `common` 은 전원이 비는 구간, `partial` 은 정확히 한 명만 빠지는 구간(3명 이상일 때)이다.
+
+`GET /api/group?g=<그룹ID>` → `{"ok": true, "group": {"id", "name", "members": [{"id", "name", "classes"}]}}`
+
+`POST /api/group`
+- `{"action": "create", "name": "소융 밥약"}` → `group_id`
+- `{"action": "save", "group_id", "member_id"(수정 시), "name", "classes", "claim"(같은 이름 덮어쓰기)}` → `member_id`
+- `{"action": "delete", "group_id", "member_id"}` → `deleted`
+
+오류 코드: `GROUP_NOT_FOUND`(404), `NAME_TAKEN`(409), `GROUP_FULL`(409, 20명), `not_configured`(503, 환경변수 없음)
 
 ## 정해 둔 규칙
 
