@@ -119,10 +119,57 @@ def test_blank_white_is_not_timetable():
     assert e.value.code == "not_timetable"
 
 
-def test_dark_mode_is_reported():
+def test_blank_black_is_not_timetable():
     with pytest.raises(ParseError) as e:
         parse_timetable(_png(Image.new("RGB", (1080, 2000), (20, 20, 22))))
-    assert e.value.code == "dark_mode"
+    assert e.value.code == "not_timetable"
+
+
+# ---- 다크모드 ----------------------------------------------------------------
+
+def test_dark_mode_recognizes_all_blocks():
+    result = parse_timetable(make_timetable(SAMPLE, dark=True))
+    assert result["meta"]["theme"] == "dark"
+    assert as_set(result["classes"]) == expected(SAMPLE)
+
+
+def test_light_mode_theme_is_reported():
+    assert parse_timetable(make_timetable(SAMPLE))["meta"]["theme"] == "light"
+
+
+@pytest.mark.parametrize("kw", [{"width": 662, "hour_px": 74, "fmt": "JPEG"}, {"fmt": "JPEG"}])
+def test_dark_mode_on_compressed_small_screen(kw):
+    result = parse_timetable(make_timetable(SAMPLE, dark=True, **kw))
+    assert_close(as_set(result["classes"]), expected(SAMPLE))
+
+
+def test_dark_mode_cropped_bottom_warns():
+    result = parse_timetable(make_timetable(SAMPLE, dark=True, overlay_from_hour=15))
+    assert "grid_ends_early" in {w["code"] for w in result["warnings"]}
+
+
+# ---- 수업 길이는 보정하지 않는다 (학교 수업 + 개인 일정) -------------------------
+
+IRREGULAR = [
+    (0, "12:00", "14:50"),  # 2시간 50분 수업
+    (1, "17:00", "17:50"),  # 50분 (채플·전공지도)
+    (2, "09:00", "12:00"),  # 근로 3시간
+    (3, "13:00", "14:10"),  # 운동 70분
+    (4, "16:30", "17:45"),  # 1시간 15분, 정각이 아닌 시작
+]
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_irregular_lengths_are_kept(dark):
+    result = parse_timetable(make_timetable(IRREGULAR, dark=dark))
+    assert as_set(result["classes"]) == expected(IRREGULAR)
+
+
+def test_dense_timetable_hides_grid_lines():
+    # 블록이 가로선을 거의 다 덮는 빽빽한 시간표 (실제 친구 캡처에서 발생)
+    dense = [(d, "09:00", "11:50") for d in range(5)] + [(d, "12:00", "14:50") for d in range(5)]
+    result = parse_timetable(make_timetable(dense, dark=True, width=662, hour_px=74))
+    assert as_set(result["classes"]) == expected(dense)
 
 
 def test_six_images_under_five_seconds():

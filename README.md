@@ -49,11 +49,11 @@ tools/             시연 샘플 생성, 정확도 측정
 {"ok": true,
  "classes": [{"day": "MON", "start": "09:00", "end": "10:15", "color": "#f28c8c"}],
  "warnings": [{"code": "grid_ends_early", "message": "..."}],
- "meta": {"days": ["MON","TUE","WED","THU","FRI"], "grid_start": "09:00", "grid_end": "18:00", "px_per_hour": 120.0}}
+ "meta": {"theme": "dark", "days": ["MON","TUE","WED","THU","FRI"], "grid_start": "09:00", "grid_end": "18:00", "px_per_hour": 120.0}}
 ```
 
 실패 시 `{"ok": false, "error": {"code": "not_timetable", "message": "..."}}`
-(`empty`, `not_image`, `not_timetable`, `dark_mode`, `too_large`)
+(`empty`, `not_image`, `not_timetable`, `too_large`)
 
 `POST /api/free`
 
@@ -68,20 +68,22 @@ tools/             시연 샘플 생성, 정확도 측정
 
 - 공강 범위는 09:00~18:00 고정, 월~금만 계산한다.
 - 수업이 없는 요일은 그 사람이 비어 있는 것으로 계산한다.
-- 인식한 시각은 5분 단위로 맞추고, 수업 길이가 75·150·180분에 10분 이내로 가까우면 그 값으로 맞춘다.
+- 라이트모드와 다크모드 캡처를 모두 인식한다.
+- 인식한 시각은 5분 단위로만 반올림하고 수업 길이는 보정하지 않는다. 학교 수업(50분, 1시간 15분, 2시간 50분)과 근로·알바·운동 같은 개인 일정의 길이가 제각각이기 때문이다.
 - 캡처 맨 위 가로 눈금을 09:00으로 본다. 위로 스크롤된 캡처는 확인 화면의 '캡처 맨 위 시각'으로 한 번에 옮긴다.
 - 격자가 18시 전에 끝나면(아래가 가려짐) 경고하고, 그 시간대는 사용자가 직접 확인·추가한다.
 - 이미지는 메모리에서만 처리하고 저장하지 않는다.
 
 ## 실제 캡처로 조정할 값
 
-인식 기준값은 `core/parser.py` 맨 위 상수에 모여 있다. 지금 값은 합성 캡처 기준이므로, 실제 캡처에서 틀리면 아래 순서로 확인한다.
+인식 기준값은 `core/parser.py` 맨 위 상수에 모여 있다. 아이폰 실제 캡처 9장(다크 8, 라이트 1, 수업 블록 88개)으로 맞췄다. 다른 기종에서 틀리면 아래 순서로 확인한다.
 
 | 증상 | 조정할 상수 |
 |------|-------------|
-| `not_timetable` (격자를 못 찾음) | `GRAY_MIN_VAL`, `GRAY_MAX_VAL`, `H_LINE_MIN_RATIO` |
+| `not_timetable` (격자를 못 찾음) | `GRAY_VAL_RANGE`(테마별), `H_LINE_MIN_RATIO` |
 | 요일 칸 수가 틀림 | `V_LINE_MIN_RATIO` |
 | 연한 색 수업을 놓침 | `BLOCK_MIN_SAT` 낮추기 |
 | 수업 하나가 둘로 쪼개짐 | `GAP_FILL_HOURS` 올리기, `HUE_SPLIT` 올리기 |
 | 붙은 두 수업이 하나로 합쳐짐 | `HUE_SPLIT` 낮추기 |
 | 시각이 한 시간씩 밀림 | 헤더 선이 눈금으로 잡힘 → `_regular_run` 결과 확인 |
+| 정각이 아닌 시작 시각이 5분 늦게 나옴 | `BLOCK_TOP_INSET_HOURS` |

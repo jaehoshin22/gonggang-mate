@@ -11,8 +11,11 @@ PASTELS = [
     (242, 140, 140), (130, 180, 240), (140, 205, 160), (245, 190, 110),
     (180, 150, 225), (110, 200, 200), (240, 160, 200), (200, 190, 120),
 ]
-GRID = (226, 226, 226)
-TEXT = (60, 60, 60)
+THEMES = {
+    # 배경, 격자선, 일반 글자, 하단 탭바
+    "light": {"bg": (255, 255, 255), "grid": (226, 226, 226), "text": (60, 60, 60), "bar": (247, 247, 247)},
+    "dark": {"bg": (17, 17, 17), "grid": (45, 45, 45), "text": (200, 200, 200), "bar": (28, 28, 28)},
+}
 
 
 def _to_min(t):
@@ -32,12 +35,15 @@ def make_timetable(
     label_w=56,
     overlay_from_hour=None,
     fmt="PNG",
+    dark=False,
 ):
     """classes: [(day_index, "10:30", "11:45"), ...] 또는 (day, start, end, color_index)."""
     grid_top = top + header_h
     grid_bottom = grid_top + (end_hour - start_hour) * hour_px
     height = grid_bottom + 240
-    img = Image.new("RGB", (width, height), (255, 255, 255))
+    t = THEMES["dark" if dark else "light"]
+    GRID, TEXT = t["grid"], t["text"]
+    img = Image.new("RGB", (width, height), t["bg"])
     d = ImageDraw.Draw(img)
 
     # 상태바·앱 헤더 흉내
@@ -68,11 +74,14 @@ def make_timetable(
     for n, item in enumerate(classes):
         day, start, end = item[:3]
         color = PASTELS[item[3] if len(item) > 3 else n % len(PASTELS)]
+        if dark:  # 다크모드 블록은 조금 진한 색
+            color = tuple(round(c * 0.85) for c in color)
         y0 = grid_top + (_to_min(start) - start_hour * 60) / 60 * hour_px
         y1 = grid_top + (_to_min(end) - start_hour * 60) / 60 * hour_px
-        x0 = round(label_w + col_w * day) + 1
-        x1 = round(label_w + col_w * (day + 1)) - 1
-        d.rectangle([x0, round(y0), x1, round(y1) - 1], fill=color)
+        # 실제 에브리타임처럼 블록은 세로선 안쪽, 시각 선보다 2px 아래에서 시작
+        x0 = round(label_w + col_w * day) + 2
+        x1 = round(label_w + col_w * (day + 1)) - 2
+        d.rectangle([x0, round(y0) + 2, x1, round(y1) - 1], fill=color)
         # 블록 안 흰 글자 (과목명 두 줄 + 강의실). 글자 하나 = 획 굵기 3px 사각형
         for k, w in enumerate((0.85, 0.6, 0.4)):
             ty = round(y0) + 8 + k * 30
@@ -85,7 +94,7 @@ def make_timetable(
                 cx += 27
 
     # 하단 탭바
-    d.rectangle([0, height - 150, width, height], fill=(247, 247, 247))
+    d.rectangle([0, height - 150, width, height], fill=t["bar"])
     for i in range(5):
         cx = width / 5 * i + width / 10
         d.rectangle([cx - 25, height - 115, cx + 25, height - 65], fill=(170, 170, 170))
@@ -93,7 +102,7 @@ def make_timetable(
     # 친구 목록 같은 오버레이가 아래를 가림
     if overlay_from_hour is not None:
         oy = grid_top + (overlay_from_hour - start_hour) * hour_px + hour_px // 3
-        d.rectangle([0, oy, width, height], fill=(255, 255, 255))
+        d.rectangle([0, oy, width, height], fill=t["bg"])
         d.rectangle([0, oy, width, oy + 6], fill=(200, 200, 200))
         for k in range(4):
             y = oy + 40 + k * 90
