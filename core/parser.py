@@ -265,12 +265,12 @@ def _to_class(day, top_px, bottom_px, px_per_hour, color, cut_end=False):
 
 def _open(data):
     if not data:
-        raise ParseError("empty", "이미지가 비어 있습니다.")
+        raise ParseError("empty", "이미지가 비어 있어요.")
     try:
         img = Image.open(BytesIO(data))
         img.load()
     except (UnidentifiedImageError, OSError):
-        raise ParseError("not_image", "이미지 파일이 아닙니다. 시간표 캡처(PNG, JPG)를 올려 주세요.")
+        raise ParseError("not_image", "이미지 파일이 아니에요.")
     return img.convert("RGB")
 
 
@@ -292,7 +292,7 @@ def parse_timetable(data):
     h_lines = _find_lines(_row_counts(gray), width, H_LINE_MIN_RATIO)
     hours = _regular_run(h_lines, min_gap=max(20, height / 60))
     if len(hours) < 3:
-        raise ParseError("not_timetable", "시간표 격자를 찾지 못했습니다. 에브리타임 시간표 화면을 캡처해 주세요.")
+        raise ParseError("not_timetable", "시간표를 찾지 못했어요.")
     px_per_hour = (hours[-1] - hours[0]) / (len(hours) - 1)
 
     # 2. 격자 밖(아래 카드 테두리 등)에서 우연히 간격이 맞은 눈금 잘라내기.
@@ -320,7 +320,7 @@ def parse_timetable(data):
         j += 1
     hours = hours[i:j + 1]
     if len(hours) < 3:
-        raise ParseError("not_timetable", "시간표 격자를 찾지 못했습니다. 에브리타임 시간표 화면을 캡처해 주세요.")
+        raise ParseError("not_timetable", "시간표를 찾지 못했어요.")
     grid_top, grid_bottom = round(hours[0]), round(hours[-1])
     grid_h = grid_bottom - grid_top
 
@@ -329,13 +329,13 @@ def parse_timetable(data):
     v_lines = _find_lines(_col_counts(band), grid_h, V_LINE_MIN_RATIO)
     columns = _day_columns(v_lines, width)
     if not 3 <= len(columns) <= 7:
-        raise ParseError("not_timetable", "요일 칸을 찾지 못했습니다. 에브리타임 시간표 화면을 캡처해 주세요.")
+        raise ParseError("not_timetable", "요일 칸을 찾지 못했어요.")
 
     warnings = []
     if len(columns) < 5:
         warnings.append({
             "code": "few_days",
-            "message": f"요일 칸이 {len(columns)}개만 보입니다. 화면 옆이 잘리지 않았는지 확인해 주세요.",
+            "message": f"요일이 {len(columns)}개만 보여요. 화면 옆이 잘리지 않았는지 확인해 주세요.",
         })
 
     # 3. 열마다 색칠된 구간 읽기
@@ -361,14 +361,14 @@ def parse_timetable(data):
             if b >= grid_h - 2 and end_hour < END_HOUR_EXPECTED:
                 warnings.append({
                     "code": "block_cut",
-                    "message": f"{item['start']}에 시작하는 수업이 격자 끝에서 잘렸습니다. 종료 시각을 확인해 주세요.",
+                    "message": f"{item['start']}에 시작하는 수업이 화면 끝에서 잘렸어요. 끝나는 시각을 확인해 주세요.",
                 })
             classes.append(item)
 
     if end_hour < END_HOUR_EXPECTED:
         warnings.append({
             "code": "grid_ends_early",
-            "message": f"시간표가 {end_hour}시까지만 보입니다. 그 뒤 일정이 화면에 가려졌다면 직접 추가해 주세요.",
+            "message": f"시간표가 {end_hour}시까지만 보여요. 그 뒤 수업은 직접 추가해 주세요.",
         })
 
     return {

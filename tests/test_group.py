@@ -140,7 +140,7 @@ def test_missing_group(store):
     ({"name": "", "classes": []}, "이름"),
     ({"name": "가" * 21, "classes": []}, "20자"),
     ({"name": "a", "classes": [{"day": "XYZ", "start": "09:00", "end": "10:00"}]}, "요일"),
-    ({"name": "a", "classes": [{"day": "MON", "start": "12:00", "end": "11:00"}]}, "종료"),
+    ({"name": "a", "classes": [{"day": "MON", "start": "12:00", "end": "11:00"}]}, "끝나는"),
     ({"name": "a", "classes": "nope"}, "형식"),
 ])
 def test_invalid_save_is_rejected(payload, message):

@@ -15,7 +15,7 @@ def error(status, code, message):
 def handle_parse(body):
     """본문 = 이미지 바이트 그대로 (multipart 아님)."""
     if len(body) > MAX_IMAGE_BYTES:
-        return error(413, "too_large", "이미지가 너무 큽니다(4MB 이하).")
+        return error(413, "too_large", "이미지가 너무 커요. 4MB 이하로 올려 주세요.")
     try:
         result = parse_timetable(body)
     except ParseError as e:
@@ -28,9 +28,9 @@ def handle_free(body):
     try:
         payload = json.loads(body.decode("utf-8") or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return error(400, "bad_json", "요청 형식이 올바르지 않습니다.")
+        return error(400, "bad_json", "요청 형식이 올바르지 않아요.")
     if not isinstance(payload, dict):
-        return error(400, "bad_json", "요청 형식이 올바르지 않습니다.")
+        return error(400, "bad_json", "요청 형식이 올바르지 않아요.")
     try:
         result = find_overlaps(payload.get("members"))
     except (TypeError, ValueError) as e:

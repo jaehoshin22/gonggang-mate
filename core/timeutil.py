@@ -11,10 +11,10 @@ DAY_LABELS = {
 def to_minutes(text):
     """'10:30' -> 630. 형식이 틀리면 ValueError."""
     if not isinstance(text, str) or ":" not in text:
-        raise ValueError(f"시각 형식이 올바르지 않습니다: {text!r}")
+        raise ValueError(f"시각 형식이 올바르지 않아요: {text!r}")
     hour_s, minute_s = text.split(":", 1)
     if not (hour_s.isdigit() and minute_s.isdigit()):
-        raise ValueError(f"시각 형식이 올바르지 않습니다: {text!r}")
+        raise ValueError(f"시각 형식이 올바르지 않아요: {text!r}")
     hour, minute = int(hour_s), int(minute_s)
     if not (0 <= hour <= 24 and 0 <= minute < 60) or (hour == 24 and minute):
         raise ValueError(f"존재하지 않는 시각입니다: {text!r}")

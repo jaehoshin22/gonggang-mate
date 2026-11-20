@@ -26,20 +26,20 @@ MAX_MEMBERS = 20
 
 def validate_members(members):
     if not isinstance(members, list) or not members:
-        raise ValueError("멤버가 한 명 이상 필요합니다.")
+        raise ValueError("멤버가 한 명 이상 필요해요.")
     if len(members) > MAX_MEMBERS:
-        raise ValueError(f"한 번에 {MAX_MEMBERS}명까지 비교할 수 있습니다.")
+        raise ValueError(f"한 번에 {MAX_MEMBERS}명까지 비교할 수 있어요.")
     names = []
     for m in members:
         if not isinstance(m, dict):
-            raise ValueError("멤버 형식이 올바르지 않습니다.")
+            raise ValueError("멤버 형식이 올바르지 않아요.")
         name = str(m.get("name", "")).strip()
         if not name:
-            raise ValueError("이름이 비어 있는 멤버가 있습니다.")
+            raise ValueError("이름이 비어 있는 멤버가 있어요.")
         if name in names:
-            raise ValueError(f"이름이 중복되었습니다: {name}")
+            raise ValueError(f"이름이 중복됐어요: {name}")
         if not isinstance(m.get("classes", []), list):
-            raise ValueError(f"{name}의 수업 목록 형식이 올바르지 않습니다.")
+            raise ValueError(f"{name}의 수업 목록 형식이 올바르지 않아요.")
         names.append(name)
     return names
 
@@ -52,7 +52,7 @@ def _free_slots(classes):
         start = to_minutes(item.get("start"))
         end = to_minutes(item.get("end"))
         if start >= end:
-            raise ValueError(f"종료 시각이 시작 시각보다 늦어야 합니다: {item}")
+            raise ValueError(f"끝나는 시각이 시작보다 늦어야 해요: {item}")
         if day not in busy:
             continue  # 토·일 수업은 계산하지 않음
         first = start // SLOT

@@ -51,7 +51,7 @@ const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
 // 90 -> '1시간 30분', 120 -> '2시간', 30 -> '30분'
 const fmtMinutes = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ');
-const errText = (err) => (err instanceof TypeError ? '서버에 연결하지 못했습니다.' : err.message);
+const errText = (err) => (err instanceof TypeError ? '서버에 연결하지 못했어요.' : err.message);
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -217,20 +217,21 @@ function myName() {
   return me ? me.name : null;
 }
 
-async function shareLink() {
+async function shareLink(e) {
   const link = groupLink(state.group.id);
-  const btn = $('#share-btn');
+  const btn = e.currentTarget;
+  const label = btn.textContent;
   if (navigator.share) {
     navigator.share({ title: '공강메이트', text: `${state.group.name || '공강 그룹'} 공강 맞추기`, url: link }).catch(() => {});
     return;
   }
   try {
     await navigator.clipboard.writeText(link);
-    btn.textContent = '복사됨';
+    btn.textContent = '링크를 복사했어요';
   } catch {
     window.prompt('링크를 복사해 주세요', link);
   }
-  setTimeout(() => { btn.textContent = '링크 공유'; }, 2000);
+  setTimeout(() => { btn.textContent = label; }, 2000);
 }
 
 function renderGroup() {
@@ -250,7 +251,7 @@ function renderGroup() {
 
   $('#my-action').replaceChildren(el('button', {
     class: `btn ${me ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
-    text: me ? `내 시간표 다시 올리기 (${me})` : '내 시간표 올리기',
+    text: me ? `${me} 시간표 다시 올리기` : '내 시간표 올리기',
     onclick: () => { state.joinFile = null; go('join'); },
   }));
 
@@ -258,9 +259,16 @@ function renderGroup() {
   if (g.error) {
     panel.replaceChildren(el('p', { class: 'error-text', text: g.error }));
   } else if (g.members.length < 2 || !state.result) {
-    panel.replaceChildren(el('div', { class: 'empty-box', text: g.members.length
-      ? `지금 ${g.members.length}명이 올렸어요. 두 명 이상 올리면 같이 비는 시간이 보여요. 링크를 카톡방에 공유해 주세요.`
-      : '아직 아무도 올리지 않았어요. 먼저 내 시간표를 올리고 링크를 카톡방에 공유해 주세요.' }));
+    panel.replaceChildren(g.members.length
+      ? el('div', { class: 'empty-box' }, [
+        el('strong', { text: `지금 ${g.members.length}명 참여 중` }),
+        el('p', { text: '한 명만 더 올리면 같이 비는 시간이 보여요' }),
+        el('button', { class: 'btn btn-primary btn-small', type: 'button', text: '링크 공유', onclick: shareLink }),
+      ])
+      : el('div', { class: 'empty-box' }, [
+        el('strong', { text: '아직 아무도 없어요' }),
+        el('p', { text: '내 시간표를 먼저 올려 보세요' }),
+      ]));
   } else {
     renderResult(panel, state.result, me);
   }
@@ -322,12 +330,12 @@ function renderResult(panel, r, me) {
     onclick: () => openDetail(s, me),
   }));
   const days = segs.some((s) => s.day === 'SAT') ? DAYS : DAYS.slice(0, 5);
-  panel.append(el('p', { class: 'result-rule', text: '수업 사이에 2명 이상이 30분 이상 같이 비는 시간만 보여요.' }));
+  panel.append(el('p', { class: 'result-rule', text: '수업 사이에 30분 이상 같이 비는 시간만 보여요.' }));
   panel.append(renderTimetable(blocks, days, { tall: true }));
   panel.append(el('div', { class: 'legend' }, [
-    me ? el('span', {}, [el('i', { class: 'l-mine' }), '내가 포함된 공강']) : null,
-    el('span', {}, [el('i', { class: 'l-other' }), me ? '나 없이 친구들만' : '같이 비는 공강']),
-    el('span', { class: 'legend-hint', text: '칸을 누르면 자세히' }),
+    me ? el('span', {}, [el('i', { class: 'l-mine' }), '나도 비는 시간']) : null,
+    el('span', {}, [el('i', { class: 'l-other' }), me ? '나는 안 되는 시간' : '같이 비는 시간']),
+    el('span', { class: 'legend-hint', text: '누르면 자세히' }),
   ]));
 }
 
@@ -345,7 +353,7 @@ function openDetail(s, me) {
         el('h3', { text: `${s.day_label}요일 ${s.start}–${s.end}` }),
         el('button', { class: 'modal-close', type: 'button', 'aria-label': '닫기', text: '×', onclick: closeDetail }),
       ]),
-      el('p', { class: 'modal-sub', text: `${fmtMinutes(s.minutes)} · ${s.count}명${s.everyone ? ' (전원)' : ''}` }),
+      el('p', { class: 'modal-sub', text: `${fmtMinutes(s.minutes)} · ${s.everyone ? `전원 ${s.count}명` : `${s.count}명`}` }),
       el('ul', { class: 'modal-names' }, s.names.map((n) => el('li', { class: n === me ? 'me' : '', text: n === me ? `${n} (나)` : n }))),
     ]),
   ]);
@@ -383,7 +391,7 @@ function renderJoin() {
     $('#join-file-label').textContent = '내 시간표 캡처 선택';
   }
   const btn = $('#join-next');
-  btn.textContent = state.joinFile ? '인식하기' : '캡처를 선택해 주세요';
+  btn.textContent = '인식하기';
   btn.disabled = !state.joinFile;
 }
 
@@ -391,7 +399,7 @@ async function joinParse() {
   const name = $('#join-name').value.trim();
   if (!name) {
     const box = $('#join-error');
-    box.textContent = '이름을 먼저 입력해 주세요.';
+    box.textContent = '이름을 먼저 적어 주세요.';
     box.hidden = false;
     $('#join-name').focus();
     return;
@@ -428,7 +436,7 @@ async function saveToGroup(claim = false) {
     go('group');
   } catch (err) {
     if (err.code === 'NAME_TAKEN' && !mine) showNameConflict(d.name.trim());
-    else showReviewError(err.code === 'NAME_TAKEN' ? `'${d.name.trim()}'은(는) 이미 다른 사람이 쓰는 이름입니다.` : errText(err));
+    else showReviewError(err.code === 'NAME_TAKEN' ? `같은 이름을 다른 사람이 쓰고 있어요: ${d.name.trim()}` : errText(err));
   } finally {
     btn.disabled = false;
     btn.textContent = '그룹에 저장';
@@ -439,10 +447,10 @@ async function saveToGroup(claim = false) {
 function showNameConflict(name) {
   const box = $('#review-error');
   box.replaceChildren(
-    el('p', { text: `이 그룹에 '${name}'이(가) 이미 있습니다.` }),
+    el('p', { text: `이 그룹에 같은 이름이 이미 있어요: ${name}` }),
     el('div', { class: 'conflict-actions' }, [
       el('button', {
-        class: 'btn btn-primary btn-small', type: 'button', text: `내가 그 ${name}이에요 · 내 시간표로 바꾸기`,
+        class: 'btn btn-primary btn-small', type: 'button', text: `내가 그 ${name} 맞아요 · 내 시간표로 바꾸기`,
         onclick: () => saveToGroup(true),
       }),
       el('button', {
@@ -513,22 +521,23 @@ function renderReview() {
   $('#review-error').hidden = true;
   if (!d) return;
 
+  panel.append(el('h2', { class: 'page-title', text: '인식 결과 확인' }));
   panel.append(el('label', { class: 'field' }, [
     el('span', { text: '내 이름' }),
     el('input', { id: 'review-name', value: d.name, maxlength: 20, placeholder: '이름', oninput: (e) => { d.name = e.target.value; } }),
   ]));
 
   if (d.status === 'error') {
-    panel.append(el('div', { class: 'alert error', text: `${d.error} 아래에서 수업을 직접 추가해 주세요.` }));
+    panel.append(el('div', { class: 'alert error', text: `${d.error} 다른 캡처로 다시 하거나 아래에서 직접 추가해 주세요.` }));
   }
   if (d.warnings.length) {
     panel.append(el('div', { class: 'alert' }, [
       el('p', { text: d.warnings.map((w) => w.message).join(' ') }),
       // 경고가 있을 때만: 캡처 맨 위 시각이 9시가 아니면 전체를 밀어 맞춘다
       el('div', { class: 'row-inline' }, [
-        el('span', { class: 'sub', text: '캡처 맨 위 시각' }),
+        el('span', { class: 'sub', text: '시간표 시작 시각' }),
         el('select', {
-          'aria-label': '캡처 맨 위 시각',
+          'aria-label': '시간표 시작 시각',
           onchange: (e) => { shiftClasses(d, Number(e.target.value)); renderReview(); },
         }, [8, 9, 10, 11].map((h) => el('option', { value: h, selected: h === d.gridStart, text: `${h}시` }))),
       ]),
@@ -549,7 +558,7 @@ function renderReview() {
   ]));
 
   const list = el('ul', { class: 'class-list' });
-  if (!d.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없습니다. 모든 요일에 학교에 오지 않는 것으로 계산합니다.' }));
+  if (!d.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없어요. 수업 추가로 넣어 주세요.' }));
   for (const c of d.classes) list.append(classRow(d, c));
   panel.append(list);
 
@@ -558,9 +567,9 @@ function renderReview() {
 
 function validateDraft() {
   const name = state.draft.name.trim();
-  if (!name) return '이름이 비어 있습니다. 이름을 적어 주세요.';
-  if (name.length > 20) return '이름은 20자 이하로 적어 주세요.';
-  if (state.draft.classes.some((c) => !isValidClass(c))) return '종료 시각이 시작보다 빠른 수업이 있습니다.';
+  if (!name) return '이름을 적어 주세요.';
+  if (name.length > 20) return '이름은 20자까지 쓸 수 있어요.';
+  if (state.draft.classes.some((c) => !isValidClass(c))) return '끝나는 시각이 시작보다 빠른 수업이 있어요.';
   return null;
 }
 

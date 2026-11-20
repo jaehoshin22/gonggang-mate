@@ -24,6 +24,8 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 main, .app-header { max-width: 520px; margin: 0 auto; padding: 0 16px; }
@@ -228,3 +230,7 @@ body.no-scroll { overflow: hidden; }
 .icon-round:active { background: var(--surface); }
 .icon-round.spin svg { animation: spin .6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-box strong { display: block; color: var(--text); font-size: 15px; }
+.empty-box p { margin: 4px 0 0; }
+.empty-box .btn { margin-top: 14px; }

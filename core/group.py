@@ -17,13 +17,13 @@ COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_CLASSES = 60
 
 ERRORS = {
-    "GROUP_NOT_FOUND": (404, "그룹을 찾을 수 없습니다. 링크를 다시 확인해 주세요."),
-    "MEMBER_NOT_FOUND": (404, "이미 삭제된 사람입니다. 새로고침해 주세요."),
-    "NAME_TAKEN": (409, "이 그룹에 같은 이름이 이미 있습니다."),
-    "GROUP_FULL": (409, "그룹에는 20명까지만 들어올 수 있습니다."),
-    "BAD_DATA": (400, "시간표 형식이 올바르지 않습니다."),
-    "DB_UNAVAILABLE": (503, "저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."),
-    "DB_ERROR": (500, "저장 중 오류가 났습니다."),
+    "GROUP_NOT_FOUND": (404, "그룹을 찾을 수 없어요. 링크를 다시 확인해 주세요."),
+    "MEMBER_NOT_FOUND": (404, "내 시간표를 찾을 수 없어요. 다시 올려 주세요."),
+    "NAME_TAKEN": (409, "이 그룹에 같은 이름이 이미 있어요."),
+    "GROUP_FULL": (409, "그룹에는 20명까지만 들어올 수 있어요."),
+    "BAD_DATA": (400, "시간표 형식이 올바르지 않아요."),
+    "DB_UNAVAILABLE": (503, "지금은 저장할 수 없어요. 잠시 후 다시 시도해 주세요."),
+    "DB_ERROR": (500, "저장하지 못했어요. 다시 시도해 주세요."),
 }
 
 
@@ -33,29 +33,29 @@ def _error(status, code, message):
 
 def _uuid(value, what):
     if not isinstance(value, str) or not UUID_RE.match(value.lower()):
-        raise ValueError(f"{what}가 올바르지 않습니다.")
+        raise ValueError(f"{what}가 올바르지 않아요.")
     return value.lower()
 
 
 def _clean_name(value, limit=20):
     name = str(value or "").strip()
     if not name:
-        raise ValueError("이름을 입력해 주세요.")
+        raise ValueError("이름을 적어 주세요.")
     if len(name) > limit:
-        raise ValueError(f"이름은 {limit}자 이하로 입력해 주세요.")
+        raise ValueError(f"이름은 {limit}자까지 쓸 수 있어요.")
     return name
 
 
 def _clean_classes(classes):
     if not isinstance(classes, list) or len(classes) > MAX_CLASSES:
-        raise ValueError("수업 목록 형식이 올바르지 않습니다.")
+        raise ValueError("수업 목록 형식이 올바르지 않아요.")
     out = []
     for c in classes:
         if not isinstance(c, dict) or c.get("day") not in DAYS:
-            raise ValueError("요일이 올바르지 않습니다.")
+            raise ValueError("요일이 올바르지 않아요.")
         start, end = to_minutes(c.get("start")), to_minutes(c.get("end"))
         if start >= end:
-            raise ValueError("종료 시각이 시작 시각보다 늦어야 합니다.")
+            raise ValueError("끝나는 시각이 시작보다 늦어야 해요.")
         color = c.get("color")
         out.append({
             "day": c["day"], "start": to_hhmm(start), "end": to_hhmm(end),
@@ -85,7 +85,7 @@ def rows_to_group(group_id, rows):
 
 def handle_group(method, query, body, store):
     if store is None:
-        return _error(503, "not_configured", "그룹 기능이 아직 설정되지 않았습니다(Supabase 환경변수 필요).")
+        return _error(503, "not_configured", "지금은 저장할 수 없어요. 잠시 후 다시 시도해 주세요.")
     try:
         if method == "GET":
             gid = _uuid(query.get("g"), "그룹 링크")
@@ -97,9 +97,9 @@ def handle_group(method, query, body, store):
         try:
             payload = json.loads((body or b"{}").decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return _error(400, "bad_json", "요청 형식이 올바르지 않습니다.")
+            return _error(400, "bad_json", "요청 형식이 올바르지 않아요.")
         if not isinstance(payload, dict):
-            return _error(400, "bad_json", "요청 형식이 올바르지 않습니다.")
+            return _error(400, "bad_json", "요청 형식이 올바르지 않아요.")
         action = payload.get("action")
 
         if action == "create":
@@ -115,7 +115,7 @@ def handle_group(method, query, body, store):
             new_id = store.save_member(gid, mid, name, classes, bool(payload.get("claim")))
             return 200, {"ok": True, "member_id": new_id}
 
-        return _error(400, "bad_action", "알 수 없는 요청입니다.")
+        return _error(400, "bad_action", "알 수 없는 요청이에요.")
     except ValueError as e:
         return _error(400, "bad_input", str(e))
     except StoreError as e:
