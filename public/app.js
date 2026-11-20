@@ -16,7 +16,7 @@ const state = {
   step: 'home',
   members: [],      // 확인 화면에서 다루는 시간표 {id, name, file, preview, status, error, warnings, classes, gridStart}
   activeId: null,
-  minMinutes: 60,
+  minMinutes: 30, // 기본은 가장 넓게 보여 주고, 필요하면 사용자가 좁힘
   result: null,
   group: null,      // {id, name, members: [{id, name, classes}]}
   groupResult: null,
@@ -53,6 +53,8 @@ const toMin = (t) => {
 };
 const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
+// 90 -> '1시간 30분', 120 -> '2시간', 30 -> '30분'
+const fmtMinutes = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ');
 const errText = (err) => (err instanceof TypeError ? '서버에 연결하지 못했습니다.' : err.message);
 
 // 오늘 날짜로 이번 학기 계산: 1~7월은 1학기, 8~12월은 2학기 (8월부터 2학기 수강신청)
@@ -308,12 +310,12 @@ function renderResult(panel, r) {
     class: 'summary',
     text: r.common.length
       ? `${r.member_count}명이 함께 비는 시간 ${r.common.length}개 · 합계 ${Math.floor(totalMin / 60)}시간 ${totalMin % 60}분`
-      : `${r.min_minutes}분 이상 ${r.member_count}명이 모두 비는 시간이 없습니다.`,
+      : `${fmtMinutes(r.min_minutes)} 이상 ${r.member_count}명이 모두 비는 시간이 없습니다.`,
   }));
 
   const blocks = r.common.map((s) => ({ ...s, kind: 'free', label: s.start }));
   if (showPartial) {
-    for (const s of r.partial) blocks.push({ ...s, kind: 'partial', label: `${s.missing[0]} 빠짐` });
+    for (const s of r.partial) blocks.push({ ...s, kind: 'partial', label: s.available.join('·') });
   }
   panel.append(renderTimetable(blocks));
   panel.append(el('div', { class: 'legend' }, [
@@ -332,10 +334,10 @@ function renderResult(panel, r) {
   if (r.partial.length) {
     const list = el('ul', { class: 'slot-list partial' }, r.partial.slice(0, 10).map((s) => el('li', {}, [
       el('span', { class: 'time', text: `${s.day_label} ${s.start}–${s.end} (${s.minutes}분)` }),
-      el('span', { class: 'sub', text: `${r.member_count}명 중 ${r.member_count - 1}명 가능 · ${s.missing[0]} 빠짐` }),
+      el('span', { class: 'sub', text: `가능: ${s.available.join(', ')} (${r.member_count}명 중 ${r.member_count - 1}명)` }),
     ])));
     if (showPartial) {
-      panel.append(el('h2', { class: 'section-title', text: '차선 시간 (한 명만 빠짐)' }), list);
+      panel.append(el('h2', { class: 'section-title', text: `차선 시간 · ${r.member_count}명 중 ${r.member_count - 1}명 가능` }), list);
     } else {
       panel.append(el('details', {}, [
         el('summary', { class: 'section-title', text: `차선 시간도 보기 (${r.partial.length})` }), list,

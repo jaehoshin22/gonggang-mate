@@ -170,7 +170,8 @@ select, input[type="time"] {
 .tt-block.partial { background: var(--partial-soft); color: #8a6100; border: 1.5px dashed var(--partial); }
 
 /* 결과 */
-.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 14px 0 4px; }
+.chips-title { margin: 14px 0 6px; font-size: 13px; color: var(--muted); }
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0 0 4px; }
 .chips button {
   border: 1px solid var(--line); background: var(--bg); white-space: nowrap;
   padding: 8px 4px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer;

@@ -4,7 +4,7 @@
 1. 하루 09:00~18:00 을 5분 칸 108개로 나눈다.
 2. 멤버마다 수업이 있는 칸을 표시하고, 칸마다 비어 있는 사람을 모은다.
 3. 전원이 비어 있는 칸이 이어진 구간 = 공통 공강.
-4. 정확히 한 명만 빠지는 칸이 이어진 구간 = 차선 시간 (3명 이상일 때).
+4. 정확히 한 명만 안 되는 칸이 이어진 구간 = 차선 시간 (3명 이상일 때). 되는 사람 이름을 함께 준다.
 5. 최소 시간보다 짧은 구간은 버린다.
 
 수업이 하나도 없는 요일은 그 사람이 '비어 있음'으로 처리한다.
@@ -123,7 +123,7 @@ def find_free(members, min_minutes=DEFAULT_MIN_MINUTES):
                     entry = _slot_entry(day, i, j)
                     entry["missing"] = [who]
                     entry["available"] = [x for x in names if x != who]
-                    entry["label"] += f" · {n}명 중 {n - 1}명 가능 ({who} 빠짐)"
+                    entry["label"] += f" · {n}명 중 {n - 1}명 가능 ({', '.join(entry['available'])})"
                     partial.append(entry)
                 i = j
 

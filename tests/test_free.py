@@ -86,7 +86,7 @@ def test_partial_when_one_person_missing():
     assert len(mon) == 1
     assert mon[0]["missing"] == ["D"]
     assert mon[0]["available"] == ["A", "B", "C"]
-    assert "4명 중 3명 가능 (D 빠짐)" in mon[0]["label"]
+    assert "4명 중 3명 가능 (A, B, C)" in mon[0]["label"]
 
 
 def test_partial_splits_by_missing_person():
