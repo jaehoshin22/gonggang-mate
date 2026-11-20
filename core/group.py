@@ -4,7 +4,6 @@ GET  /api/group?g=<그룹ID>                        그룹과 멤버 시간표 �
 POST /api/group {"action": "create", "name"}      그룹 만들기 -> group_id
 POST /api/group {"action": "save", "group_id", "member_id"?, "name", "classes", "claim"?}
                                                   내 시간표 저장 -> member_id
-POST /api/group {"action": "delete", "group_id", "member_id"}
 """
 
 import json
@@ -115,11 +114,6 @@ def handle_group(method, query, body, store):
             classes = _clean_classes(payload.get("classes", []))
             new_id = store.save_member(gid, mid, name, classes, bool(payload.get("claim")))
             return 200, {"ok": True, "member_id": new_id}
-
-        if action == "delete":
-            gid = _uuid(payload.get("group_id"), "그룹 링크")
-            mid = _uuid(payload.get("member_id"), "멤버 정보")
-            return 200, {"ok": True, "deleted": store.delete_member(gid, mid)}
 
         return _error(400, "bad_action", "알 수 없는 요청입니다.")
     except ValueError as e:

@@ -21,9 +21,11 @@ def test_parse_rejects_too_large():
 
 
 def test_free_ok():
-    payload = {"members": [{"name": "A", "classes": []}], "min_minutes": 60}
+    classes = [{"day": "MON", "start": "09:00", "end": "10:15"}, {"day": "MON", "start": "12:00", "end": "13:15"}]
+    payload = {"members": [{"name": "A", "classes": classes}, {"name": "B", "classes": classes}]}
     status, body = handle_free(json.dumps(payload).encode())
-    assert status == 200 and len(body["common"]) == 5
+    assert status == 200
+    assert [(o["start"], o["end"], o["names"]) for o in body["overlaps"]] == [("10:15", "12:00", ["A", "B"])]
 
 
 def test_free_bad_json():

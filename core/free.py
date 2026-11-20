@@ -1,76 +1,34 @@
-"""공통 공강 계산 (F4 공통 공강, F5 최소 시간 필터, F6 차선 시간).
+"""같이 비는 공강 찾기 (F4 공강 계산, F6 차선 시간을 '같이 비는 사람 표시'로 통합).
 
-처리 흐름 (계획서 05 - 4, 5단계)
-1. 하루 09:00~18:00 을 5분 칸 108개로 나눈다.
-2. 멤버마다 수업이 있는 칸을 표시하고, 칸마다 비어 있는 사람을 모은다.
-3. 전원이 비어 있는 칸이 이어진 구간 = 공통 공강.
-4. 정확히 한 명만 안 되는 칸이 이어진 구간 = 차선 시간 (3명 이상일 때). 되는 사람 이름을 함께 준다.
-5. 최소 시간보다 짧은 구간은 버린다.
+공강 = 각자 그날 첫 수업 시작부터 마지막 수업 끝 사이의 빈 시간 (학교에 있는 동안 비는 시간).
+  - 첫 수업 전, 마지막 수업 후는 공강이 아니다 (보통 늦게 오거나 바로 집에 감)
+  - 수업이 없거나 하나뿐인 날은 그 사람에게 공강이 없다 (학교에 오지 않음)
 
-수업이 하나도 없는 요일은 그 사람이 '비어 있음'으로 처리한다.
-계산량: 요일 5 x 칸 108 x 멤버 N -> O(N)
+처리 흐름
+1. 하루를 5분 칸으로 나누고, 사람마다 '공강인 칸'을 표시한다.
+2. 칸마다 공강인 사람들의 집합을 구한다.
+3. segments: 같은 사람들이 공강인 칸이 이어진 구간 (겹치지 않음 -> 그리드 표시용)
+4. overlaps: 2명 이상 조합마다 '그 사람들이 모두 공강인' 가장 긴 구간 (겹칠 수 있음 -> 목록용)
+   예) 재호·민지 12:00-13:30 이고 그중 12:30-13:00 은 서준도 비면
+       [재호, 민지] 12:00-13:30 과 [재호, 민지, 서준] 12:30-13:00 두 줄
+5. MIN_MINUTES(30분)보다 짧은 구간은 버린다 (75분 수업 사이 쉬는 시간 15분 등)
+
+계산량: 요일 5 x 칸 288 x 멤버 N
 """
 
 from .timeutil import DAY_LABELS, WEEKDAYS, to_hhmm, to_minutes
 
-RANGE_START = 9 * 60
-RANGE_END = 18 * 60
 SLOT = 5
-N_SLOTS = (RANGE_END - RANGE_START) // SLOT  # 108
-DEFAULT_MIN_MINUTES = 30
-
-
-def _busy_slots(classes):
-    """{요일: [bool]*108} — True 면 수업 있음. 범위 밖 시간과 주말은 무시."""
-    busy = {day: [False] * N_SLOTS for day in WEEKDAYS}
-    for item in classes:
-        day = item.get("day")
-        start = to_minutes(item.get("start"))
-        end = to_minutes(item.get("end"))
-        if start >= end:
-            raise ValueError(f"종료 시각이 시작 시각보다 늦어야 합니다: {item}")
-        if day not in busy:
-            continue  # 토·일 수업은 공강 계산 대상이 아님
-        start = max(start, RANGE_START)
-        end = min(end, RANGE_END)
-        if start >= end:
-            continue
-        first = (start - RANGE_START) // SLOT
-        last = -(-(end - RANGE_START) // SLOT)  # 올림: 걸친 칸은 수업으로 본다
-        for i in range(first, last):
-            busy[day][i] = True
-    return busy
-
-
-def _runs(flags):
-    """[True, True, False, True] -> [(0, 2), (3, 4)]  (끝은 미포함)."""
-    runs, start = [], None
-    for i, flag in enumerate(flags + [False]):
-        if flag and start is None:
-            start = i
-        elif not flag and start is not None:
-            runs.append((start, i))
-            start = None
-    return runs
-
-
-def _slot_entry(day, first, last):
-    start = RANGE_START + first * SLOT
-    end = RANGE_START + last * SLOT
-    minutes = end - start
-    return {
-        "day": day,
-        "day_label": DAY_LABELS[day],
-        "start": to_hhmm(start),
-        "end": to_hhmm(end),
-        "minutes": minutes,
-        "label": f"{DAY_LABELS[day]} {to_hhmm(start)}–{to_hhmm(end)} ({minutes}분)",
-    }
+N_SLOTS = 24 * 60 // SLOT  # 288
+MIN_MINUTES = 30
+MAX_MEMBERS = 20
 
 
 def validate_members(members):
     if not isinstance(members, list) or not members:
         raise ValueError("멤버가 한 명 이상 필요합니다.")
+    if len(members) > MAX_MEMBERS:
+        raise ValueError(f"한 번에 {MAX_MEMBERS}명까지 비교할 수 있습니다.")
     names = []
     for m in members:
         if not isinstance(m, dict):
@@ -86,52 +44,95 @@ def validate_members(members):
     return names
 
 
-def find_free(members, min_minutes=DEFAULT_MIN_MINUTES):
+def _free_slots(classes):
+    """{요일: [bool]*288} — True 면 그 칸이 공강 (첫 수업~마지막 수업 사이의 빈 칸)."""
+    busy = {day: [False] * N_SLOTS for day in WEEKDAYS}
+    for item in classes:
+        day = item.get("day")
+        start = to_minutes(item.get("start"))
+        end = to_minutes(item.get("end"))
+        if start >= end:
+            raise ValueError(f"종료 시각이 시작 시각보다 늦어야 합니다: {item}")
+        if day not in busy:
+            continue  # 토·일 수업은 계산하지 않음
+        first = start // SLOT
+        last = -(-end // SLOT)  # 올림: 걸친 칸은 수업으로 본다
+        for i in range(first, min(last, N_SLOTS)):
+            busy[day][i] = True
+
+    free = {}
+    for day, row in busy.items():
+        idx = [i for i, b in enumerate(row) if b]
+        free[day] = [False] * N_SLOTS
+        if not idx:
+            continue  # 수업 없는 날: 학교에 없음
+        for i in range(idx[0], idx[-1] + 1):
+            free[day][i] = not row[i]
+    return free
+
+
+def _entry(day, first, last, people, names):
+    start, end = first * SLOT, last * SLOT
+    ordered = [n for n in names if n in people]
+    return {
+        "day": day,
+        "day_label": DAY_LABELS[day],
+        "start": to_hhmm(start),
+        "end": to_hhmm(end),
+        "minutes": end - start,
+        "names": ordered,
+        "count": len(ordered),
+        "everyone": len(ordered) == len(names),
+    }
+
+
+def find_overlaps(members, min_minutes=MIN_MINUTES):
     """members: [{"name": str, "classes": [{"day","start","end"}]}]"""
     names = validate_members(members)
     min_minutes = max(SLOT, int(min_minutes))
-    busy = {name: _busy_slots(m.get("classes", [])) for name, m in zip(names, members)}
-    n = len(names)
+    min_slots = -(-min_minutes // SLOT)
+    free = {name: _free_slots(m.get("classes", [])) for name, m in zip(names, members)}
 
-    common, partial = [], []
+    segments, overlaps = [], []
     for day in WEEKDAYS:
-        # 칸마다 비어 있는 사람
-        free_people = [
-            [name for name in names if not busy[name][day][i]] for i in range(N_SLOTS)
-        ]
+        per_slot = [frozenset(n for n in names if free[n][day][i]) for i in range(N_SLOTS)]
 
-        for first, last in _runs([len(p) == n for p in free_people]):
-            if (last - first) * SLOT >= min_minutes:
-                common.append(_slot_entry(day, first, last))
+        # 그리드용: 같은 사람들이 공강인 구간
+        i = 0
+        while i < N_SLOTS:
+            people = per_slot[i]
+            j = i
+            while j < N_SLOTS and per_slot[j] == people:
+                j += 1
+            if len(people) >= 2 and j - i >= min_slots:
+                segments.append(_entry(day, i, j, people, names))
+            i = j
 
-        if n >= 3:
-            # 같은 사람이 빠지는 칸끼리 묶는다
-            missing = [
-                next(x for x in names if x not in p) if len(p) == n - 1 else None
-                for p in free_people
-            ]
+        # 목록용: 조합마다 모두 공강인 가장 긴 구간
+        found = []
+        for people in {p for p in per_slot if len(p) >= 2}:
             i = 0
             while i < N_SLOTS:
-                who = missing[i]
-                if who is None:
+                if not people <= per_slot[i]:
                     i += 1
                     continue
                 j = i
-                while j < N_SLOTS and missing[j] == who:
+                while j < N_SLOTS and people <= per_slot[j]:
                     j += 1
-                if (j - i) * SLOT >= min_minutes:
-                    entry = _slot_entry(day, i, j)
-                    entry["missing"] = [who]
-                    entry["available"] = [x for x in names if x != who]
-                    entry["label"] += f" · {n}명 중 {n - 1}명 가능 ({', '.join(entry['available'])})"
-                    partial.append(entry)
+                if j - i >= min_slots:
+                    found.append((people, i, j))
                 i = j
+        # 같은 구간에 더 많은 사람이 겹치는 줄이 있으면 적은 쪽은 뺀다
+        for people, i, j in found:
+            if not any(other > people and oi == i and oj == j for other, oi, oj in found):
+                overlaps.append(_entry(day, i, j, people, names))
 
-    partial.sort(key=lambda e: (-e["minutes"], WEEKDAYS.index(e["day"]), e["start"]))
+    overlaps.sort(key=lambda e: (-e["count"], WEEKDAYS.index(e["day"]), e["start"]))
+    segments.sort(key=lambda e: (WEEKDAYS.index(e["day"]), e["start"]))
     return {
-        "member_count": n,
+        "member_count": len(names),
         "min_minutes": min_minutes,
-        "range": {"start": to_hhmm(RANGE_START), "end": to_hhmm(RANGE_END)},
-        "common": common,
-        "partial": partial,
+        "everyone_count": sum(1 for e in overlaps if e["everyone"]),
+        "overlaps": overlaps,
+        "segments": segments,
     }

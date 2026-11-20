@@ -1,8 +1,7 @@
-"""POST /api/free — 공통 공강과 차선 시간을 계산한다 (F4~F6).
+"""POST /api/free — 수업 사이에 같이 비는 공강과 그때 되는 사람을 찾는다 (F4, F6).
 
-요청 본문: {"members": [{"name": "재호", "classes": [{"day": "MON", "start": "09:00", "end": "10:15"}]}],
-            "min_minutes": 60}
-응답: {"ok": true, "common": [...], "partial": [...], ...}
+요청 본문: {"members": [{"name": "재호", "classes": [{"day": "MON", "start": "09:00", "end": "10:15"}]}]}
+응답: {"ok": true, "overlaps": [...], "segments": [...], "everyone_count": 1, ...}
 """
 
 import os

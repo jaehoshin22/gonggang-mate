@@ -2,7 +2,7 @@
 
 import json
 
-from .free import DEFAULT_MIN_MINUTES, find_free
+from .free import find_overlaps
 from .parser import ParseError, parse_timetable
 
 MAX_IMAGE_BYTES = 4 * 1024 * 1024  # Vercel 요청 본문 한도(4.5MB) 아래로
@@ -24,7 +24,7 @@ def handle_parse(body):
 
 
 def handle_free(body):
-    """본문 = {"members": [...], "min_minutes": 60}"""
+    """본문 = {"members": [...]}  -> 수업 사이에 같이 비는 시간과 사람 이름"""
     try:
         payload = json.loads(body.decode("utf-8") or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -32,8 +32,7 @@ def handle_free(body):
     if not isinstance(payload, dict):
         return error(400, "bad_json", "요청 형식이 올바르지 않습니다.")
     try:
-        min_minutes = int(payload.get("min_minutes", DEFAULT_MIN_MINUTES))
-        result = find_free(payload.get("members"), min_minutes)
+        result = find_overlaps(payload.get("members"))
     except (TypeError, ValueError) as e:
         return error(400, "bad_input", str(e))
     return 200, {"ok": True, **result}

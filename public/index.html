@@ -13,15 +13,10 @@
 <body>
   <header class="app-header">
     <h1><a href="/" class="home-link">공강메이트</a></h1>
-    <ol class="steps" id="steps" hidden>
-      <li data-step="upload">올리기</li>
-      <li data-step="review">확인</li>
-      <li data-step="result">공강</li>
-    </ol>
   </header>
 
   <main>
-    <!-- 첫 화면 -->
+    <!-- 첫 화면: 그룹 만들기 -->
     <section id="step-home" class="step" hidden>
       <div class="hero">
         <h2>친구들과 겹치는 공강, 링크 하나로 찾기</h2>
@@ -33,31 +28,19 @@
       </label>
       <button id="create-group" class="btn btn-primary" type="button">그룹 만들고 링크 받기</button>
       <p id="home-error" class="error-text" hidden></p>
-      <div class="divider"><span>또는</span></div>
-      <button class="btn btn-ghost" type="button" data-go="upload">캡처 모아서 한 번에 비교하기</button>
       <p class="note">캡처 이미지는 인식에만 쓰고 저장하지 않습니다. 그룹에는 이름과 수업 시간만 저장됩니다.</p>
     </section>
 
-    <!-- 그룹 화면 (F7) -->
+    <!-- 그룹 결과: 주간 시간표가 메인 -->
     <section id="step-group" class="step" hidden>
       <div id="group-head" class="group-head"></div>
-      <div id="share-box" class="share-box"></div>
       <div id="my-action"></div>
-      <div id="group-people" class="people-box"></div>
-      <p class="chips-title">최소 공강 시간 (이 시간 이상만 표시)</p>
-      <div class="chips" data-chips role="radiogroup" aria-label="최소 공강 시간">
-        <button type="button" data-min="30">30분</button>
-        <button type="button" data-min="60">1시간</button>
-        <button type="button" data-min="90">1시간 30분</button>
-        <button type="button" data-min="120">2시간</button>
-      </div>
+      <div id="filters" class="filters"></div>
       <div id="group-result"></div>
-      <h2 class="section-title">참여한 사람</h2>
-      <ul id="group-members" class="group-members"></ul>
       <p class="note" id="group-updated"></p>
     </section>
 
-    <!-- 그룹에 내 시간표 올리기 -->
+    <!-- 내 시간표 올리기 -->
     <section id="step-join" class="step" hidden>
       <h2 class="page-title" id="join-title">내 시간표 올리기</h2>
       <label class="field">
@@ -71,61 +54,19 @@
       </label>
       <img id="join-preview" class="join-preview" alt="선택한 캡처" hidden>
       <p id="join-error" class="error-text" hidden></p>
-      <div id="join-extra"></div>
       <div class="bottom-bar two">
-        <button class="btn btn-ghost" type="button" data-go="group">취소</button>
+        <button class="btn btn-ghost" type="button" id="join-cancel">취소</button>
         <button id="join-next" class="btn btn-primary" type="button">인식하기</button>
       </div>
     </section>
 
-    <!-- 혼자 비교 1단계: 내 시간표 먼저, 그다음 친구들 (F3) -->
-    <section id="step-upload" class="step" hidden>
-      <h2 class="section-title">1. 내 시간표</h2>
-      <div id="me-slot"></div>
-      <input id="me-file" type="file" accept="image/*" hidden>
-
-      <h2 class="section-title">2. 친구 시간표</h2>
-      <p class="hint">에브리타임에서 친구 시간표를 캡처해 올려 주세요. 썸네일을 누르면 크게 볼 수 있어요.</p>
-      <label class="upload-box" for="file-input">
-        <strong>친구 캡처 추가</strong>
-        <span>여러 장 선택 가능 · 라이트·다크모드 모두 가능</span>
-        <input id="file-input" type="file" accept="image/*" multiple hidden>
-      </label>
-
-      <ul id="member-cards" class="member-cards"></ul>
-
-      <button id="add-manual" class="btn btn-ghost" type="button">캡처 없이 직접 입력할 친구 추가</button>
-      <p class="note">이미지는 인식에만 쓰고 저장하지 않습니다.</p>
-
-      <div class="bottom-bar">
-        <button id="start-parse" class="btn btn-primary" type="button" disabled>시간표 인식하기</button>
-      </div>
-    </section>
-
-    <!-- 인식 결과 확인·수정 (F2) — 혼자 비교·그룹 공용 -->
+    <!-- 인식 결과 확인·수정 -->
     <section id="step-review" class="step" hidden>
-      <div id="member-tabs" class="tabs" role="tablist"></div>
       <div id="review-panel"></div>
       <div id="review-error" class="review-error" hidden></div>
       <div class="bottom-bar two">
         <button id="review-back" class="btn btn-ghost" type="button">이전</button>
-        <button id="review-next" class="btn btn-primary" type="button">공강 찾기</button>
-      </div>
-    </section>
-
-    <!-- 혼자 비교 3단계: 공통 공강 (F4, F5, F6) -->
-    <section id="step-result" class="step" hidden>
-      <div id="solo-people" class="people-box"></div>
-      <p class="chips-title">최소 공강 시간 (이 시간 이상만 표시)</p>
-      <div class="chips" data-chips role="radiogroup" aria-label="최소 공강 시간">
-        <button type="button" data-min="30">30분</button>
-        <button type="button" data-min="60">1시간</button>
-        <button type="button" data-min="90">1시간 30분</button>
-        <button type="button" data-min="120">2시간</button>
-      </div>
-      <div id="result-panel"></div>
-      <div class="bottom-bar">
-        <button class="btn btn-ghost" type="button" data-go="review">시간표 수정하기</button>
+        <button id="review-next" class="btn btn-primary" type="button">그룹에 저장</button>
       </div>
     </section>
   </main>

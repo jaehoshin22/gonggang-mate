@@ -76,9 +76,6 @@ class SupabaseStore:
             "p_classes": classes, "p_claim": claim,
         })
 
-    def delete_member(self, group_id, member_id):
-        return bool(self._rpc("delete_member", {"p_group": group_id, "p_member": member_id}))
-
 
 class MemoryStore:
     """schema.sql 의 함수와 같은 규칙을 메모리에서 흉내 낸다."""
@@ -136,11 +133,6 @@ class MemoryStore:
                 mid = str(uuid.uuid4())
             g["members"][mid] = {"name": name, "updated_at": now, "classes": list(classes)}
             return mid
-
-    def delete_member(self, group_id, member_id):
-        with self.lock:
-            g = self.groups.get(group_id)
-            return bool(g and g["members"].pop(member_id, None))
 
 
 _memory = MemoryStore()

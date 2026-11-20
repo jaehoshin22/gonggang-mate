@@ -1,121 +1,83 @@
 import pytest
 
-from core.free import N_SLOTS, find_free
+from core.free import N_SLOTS, find_overlaps
 
 
 def member(name, *classes):
-    return {
-        "name": name,
-        "classes": [{"day": d, "start": s, "end": e} for d, s, e in classes],
-    }
+    return {"name": name, "classes": [{"day": d, "start": s, "end": e} for d, s, e in classes]}
 
 
-def spans(result, key="common", day=None):
-    return [
-        (e["day"], e["start"], e["end"])
-        for e in result[key]
-        if day is None or e["day"] == day
+def rows(result, key="overlaps"):
+    return [(e["day"], e["start"], e["end"], e["names"]) for e in result[key]]
+
+
+def test_slot_count_covers_whole_day():
+    assert N_SLOTS == 288
+
+
+def test_only_time_between_classes_counts():
+    # 첫 수업 전(9시 전)과 마지막 수업 후는 공강이 아님
+    a = member("A", ("MON", "10:00", "11:00"), ("MON", "13:00", "14:00"))
+    b = member("B", ("MON", "09:00", "10:00"), ("MON", "15:00", "16:00"))
+    assert rows(find_overlaps([a, b])) == [("MON", "11:00", "13:00", ["A", "B"])]
+
+
+def test_day_without_class_means_not_at_school():
+    a = member("A", ("TUE", "09:00", "10:00"), ("TUE", "13:00", "14:00"))
+    b = member("B")  # 수업 없음 -> 학교에 없음
+    assert find_overlaps([a, b])["overlaps"] == []
+
+
+def test_single_class_day_has_no_gap():
+    a = member("A", ("WED", "09:00", "10:00"), ("WED", "13:00", "14:00"))
+    b = member("B", ("WED", "12:00", "13:15"))
+    assert find_overlaps([a, b])["overlaps"] == []
+
+
+def test_fifteen_minute_breaks_are_dropped():
+    a = member("A", ("MON", "09:00", "10:15"), ("MON", "10:30", "11:45"), ("MON", "13:30", "14:45"))
+    b = member("B", ("MON", "09:00", "10:15"), ("MON", "10:30", "11:45"), ("MON", "13:30", "14:45"))
+    assert rows(find_overlaps([a, b])) == [("MON", "11:45", "13:30", ["A", "B"])]
+
+
+def test_names_for_each_group_and_nested_overlap():
+    a = member("재호", ("THU", "09:00", "12:00"), ("THU", "15:00", "16:00"))
+    b = member("민지", ("THU", "09:00", "12:00"), ("THU", "15:00", "16:00"))
+    c = member("서준", ("THU", "09:00", "12:30"), ("THU", "13:30", "16:00"))
+    result = find_overlaps([a, b, c])
+    assert rows(result) == [
+        ("THU", "12:30", "13:30", ["재호", "민지", "서준"]),  # 전원이 먼저
+        ("THU", "12:00", "15:00", ["재호", "민지"]),
+    ]
+    assert result["overlaps"][0]["everyone"] is True
+    assert result["everyone_count"] == 1
+    # 그리드용 구간은 겹치지 않게 나뉨
+    assert rows(result, "segments") == [
+        ("THU", "12:00", "12:30", ["재호", "민지"]),
+        ("THU", "12:30", "13:30", ["재호", "민지", "서준"]),
+        ("THU", "13:30", "15:00", ["재호", "민지"]),
     ]
 
 
-def test_slot_count_is_108():
-    assert N_SLOTS == 108
+def test_pair_without_me_is_also_shown():
+    me = member("나", ("FRI", "09:00", "10:00"), ("FRI", "11:00", "12:00"))
+    a = member("A", ("FRI", "09:00", "10:00"), ("FRI", "15:00", "16:00"))
+    b = member("B", ("FRI", "09:00", "10:00"), ("FRI", "15:00", "16:00"))
+    names = [r[3] for r in rows(find_overlaps([me, a, b]))]
+    assert ["A", "B"] in names
+    assert ["나", "A", "B"] in names
 
 
-def test_member_without_classes_is_free_all_day():
-    result = find_free([member("재호")])
-    assert len(result["common"]) == 5
-    assert all(e["start"] == "09:00" and e["end"] == "18:00" for e in result["common"])
-    assert result["common"][0]["minutes"] == 540
+def test_evening_gap_after_18_is_kept():
+    a = member("A", ("WED", "15:00", "16:15"), ("WED", "18:25", "19:15"))
+    b = member("B", ("WED", "15:00", "16:15"), ("WED", "19:00", "20:00"))
+    assert rows(find_overlaps([a, b])) == [("WED", "16:15", "18:25", ["A", "B"])]
 
 
-def test_common_free_time_is_intersection():
-    result = find_free([
-        member("A", ("WED", "09:00", "12:00"), ("WED", "13:00", "18:00")),
-        member("B", ("WED", "10:30", "11:45")),
-    ])
-    assert spans(result, day="WED") == [("WED", "12:00", "13:00")]
-
-
-def test_label_format_matches_plan():
-    result = find_free([member("A", ("WED", "09:00", "12:00"), ("WED", "13:00", "18:00"))])
-    wed = [e for e in result["common"] if e["day"] == "WED"][0]
-    assert wed["label"] == "수 12:00–13:00 (60분)"
-
-
-def test_back_to_back_classes_leave_15min_break():
-    # 1시간 15분 수업 두 개 사이 쉬는 시간 15분
-    a = member("A", ("MON", "09:00", "10:15"), ("MON", "10:30", "11:45"), ("MON", "12:00", "18:00"))
-    assert spans(find_free([a], min_minutes=5), day="MON") == [
-        ("MON", "10:15", "10:30"),
-        ("MON", "11:45", "12:00"),
-    ]
-    assert spans(find_free([a], min_minutes=30), day="MON") == []
-
-
-def test_min_minutes_filter():
-    a = member("A", ("TUE", "09:00", "12:00"), ("TUE", "13:30", "15:00"), ("TUE", "16:00", "18:00"))
-    r60 = find_free([a], min_minutes=60)
-    assert spans(r60, day="TUE") == [("TUE", "12:00", "13:30"), ("TUE", "15:00", "16:00")]
-    r90 = find_free([a], min_minutes=90)
-    assert spans(r90, day="TUE") == [("TUE", "12:00", "13:30")]
-
-
-def test_classes_outside_range_and_weekend_are_clipped():
-    a = member("A", ("THU", "08:00", "10:00"), ("THU", "17:00", "21:00"), ("SAT", "09:00", "18:00"))
-    assert spans(find_free([a]), day="THU") == [("THU", "10:00", "17:00")]
-    assert len(find_free([a])["common"]) == 5
-
-
-def test_off_grid_times_round_toward_busy():
-    a = member("A", ("FRI", "09:00", "10:02"))
-    assert spans(find_free([a]), day="FRI") == [("FRI", "10:05", "18:00")]
-
-
-def test_partial_when_one_person_missing():
-    full = ("MON", "09:00", "18:00")
-    members = [
-        member("A", ("MON", "09:00", "12:00"), ("MON", "13:00", "18:00")),
-        member("B", ("MON", "09:00", "12:00"), ("MON", "13:00", "18:00")),
-        member("C", ("MON", "09:00", "12:00"), ("MON", "13:00", "18:00")),
-        member("D", full),
-    ]
-    result = find_free(members, min_minutes=60)
-    assert spans(result, day="MON") == []
-    mon = [e for e in result["partial"] if e["day"] == "MON"]
-    assert len(mon) == 1
-    assert mon[0]["missing"] == ["D"]
-    assert mon[0]["available"] == ["A", "B", "C"]
-    assert "4명 중 3명 가능 (A, B, C)" in mon[0]["label"]
-
-
-def test_partial_splits_by_missing_person():
-    members = [
-        member("A", ("TUE", "09:00", "12:00"), ("TUE", "14:00", "18:00")),
-        member("B", ("TUE", "09:00", "12:00"), ("TUE", "14:00", "18:00")),
-        member("C", ("TUE", "09:00", "13:00"), ("TUE", "14:00", "18:00")),
-        member("D", ("TUE", "09:00", "12:00"), ("TUE", "13:00", "18:00")),
-    ]
-    tue = [e for e in find_free(members, min_minutes=60)["partial"] if e["day"] == "TUE"]
-    assert [(e["start"], e["end"], e["missing"]) for e in tue] == [
-        ("12:00", "13:00", ["C"]),
-        ("13:00", "14:00", ["D"]),
-    ]
-
-
-def test_partial_needs_three_or_more_members():
-    members = [member("A", ("MON", "09:00", "18:00")), member("B")]
-    assert find_free(members)["partial"] == []
-
-
-def test_partial_sorted_longest_first():
-    members = [
-        member("A", ("MON", "09:00", "18:00")),
-        member("B", ("TUE", "09:00", "17:00")),
-        member("C"),
-    ]
-    partial = find_free(members, min_minutes=60)["partial"]
-    assert partial[0]["minutes"] >= partial[-1]["minutes"]
+def test_weekend_classes_are_ignored():
+    a = member("A", ("SAT", "09:00", "10:00"), ("SAT", "12:00", "13:00"))
+    b = member("B", ("SAT", "09:00", "10:00"), ("SAT", "12:00", "13:00"))
+    assert find_overlaps([a, b])["overlaps"] == []
 
 
 @pytest.mark.parametrize("members", [
@@ -125,7 +87,8 @@ def test_partial_sorted_longest_first():
     [member("A", ("MON", "12:00", "11:00"))],
     [member("A", ("MON", "25:00", "26:00"))],
     [member("A", ("MON", "abc", "11:00"))],
+    [member(f"m{i}") for i in range(21)],
 ])
 def test_invalid_input_raises(members):
     with pytest.raises(ValueError):
-        find_free(members)
+        find_overlaps(members)

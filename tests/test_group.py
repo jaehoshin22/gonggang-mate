@@ -129,14 +129,6 @@ def test_update_own_member_and_rename(store):
     assert sorted(names) == ["민지B", "재호"]
 
 
-def test_delete_member(store):
-    gid = post(store, action="create", name="g")[1]["group_id"]
-    mid = post(store, action="save", group_id=gid, name="재호", classes=[])[1]["member_id"]
-    assert post(store, action="delete", group_id=gid, member_id=mid)[1]["deleted"] is True
-    assert post(store, action="delete", group_id=gid, member_id=mid)[1]["deleted"] is False
-    assert get(store, gid)[1]["group"]["members"] == []
-
-
 def test_missing_group(store):
     gid = "00000000-0000-4000-8000-000000000000"
     assert get(store, gid)[0] == 404
