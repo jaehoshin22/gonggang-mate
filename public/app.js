@@ -242,7 +242,10 @@ function renderGroup() {
       el('h2', { text: g.name || '공강 그룹' }),
       el('p', { class: 'sub', text: `${g.members.length}명 참여` }),
     ]),
-    el('button', { id: 'share-btn', class: 'btn btn-ghost btn-small', type: 'button', text: '링크 공유', onclick: shareLink }),
+    el('div', { class: 'head-actions' }, [
+      refreshButton(),
+      el('button', { id: 'share-btn', class: 'btn btn-ghost btn-small', type: 'button', text: '링크 공유', onclick: shareLink }),
+    ]),
   );
 
   $('#my-action').replaceChildren(el('button', {
@@ -261,10 +264,23 @@ function renderGroup() {
   } else {
     renderResult(panel, state.result, me);
   }
+}
 
-  $('#group-updated').textContent = g.loadedAt
-    ? `${g.loadedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 기준 · 15초마다 자동 갱신`
-    : '';
+// 새로고침 버튼 (자동 갱신은 15초마다 따로 돈다)
+const REFRESH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+let refreshing = false;
+function refreshButton() {
+  const btn = el('button', { class: `icon-round${refreshing ? ' spin' : ''}`, type: 'button', 'aria-label': '새로고침', title: '새로고침' });
+  btn.innerHTML = REFRESH_ICON;
+  btn.addEventListener('click', async () => {
+    if (refreshing) return;
+    refreshing = true;
+    btn.classList.add('spin');
+    await Promise.all([loadGroup(), new Promise((r) => setTimeout(r, 500))]);
+    refreshing = false;
+    renderGroup();
+  });
+  return btn;
 }
 
 // ---- 결과: 주간 시간표 각 칸에 같이 비는 사람 이름 -----------------------------
@@ -306,6 +322,7 @@ function renderResult(panel, r, me) {
     onclick: () => openDetail(s, me),
   }));
   const days = segs.some((s) => s.day === 'SAT') ? DAYS : DAYS.slice(0, 5);
+  panel.append(el('p', { class: 'result-rule', text: '수업 사이에 2명 이상이 30분 이상 같이 비는 시간만 보여요.' }));
   panel.append(renderTimetable(blocks, days, { tall: true }));
   panel.append(el('div', { class: 'legend' }, [
     me ? el('span', {}, [el('i', { class: 'l-mine' }), '내가 포함된 공강']) : null,

@@ -187,6 +187,7 @@ select, input[type="time"] {
 .tt-block.slot .count { font-size: 10px; font-weight: 600; opacity: .75; }
 .tt-block.slot .more { opacity: .75; }
 #group-result { margin-top: 14px; }
+.result-rule { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
 .tt-block.mine { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .tt-block.mine .me { font-weight: 700; color: var(--accent); }
 .tt-block.other { background: var(--surface); color: var(--muted); }
@@ -216,3 +217,14 @@ body.no-scroll { overflow: hidden; }
 .modal-names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .modal-names li { padding: 6px 12px; border-radius: 999px; background: var(--surface); font-size: 14px; }
 .modal-names li.me { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+/* ---- 그룹 상단 버튼: 새로고침 + 링크 공유 ---- */
+.head-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.icon-round {
+  width: 34px; height: 34px; border: none; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-round:active { background: var(--surface); }
+.icon-round.spin svg { animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
