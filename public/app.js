@@ -297,6 +297,12 @@ function renderPeople(container, members, meId, onChange) {
     }));
   }
   container.append(row);
+  // 몇 명을 비교 중인지 한 줄 요약
+  const count = selectedMembers(members, meId).length;
+  const friends = count - (meId ? 1 : 0);
+  container.append(el('p', { class: 'people-summary', text: meId
+    ? (friends ? `나 + ${friends}명 비교 중` : '나만 선택됨 · 친구를 한 명 이상 골라 주세요')
+    : `${count}명 비교 중` }));
   if (!meId) {
     container.append(el('p', { class: 'hint', text: '내 시간표를 올리면 나는 항상 포함되고, 친구를 골라 1:1로도 볼 수 있어요.' }));
   }

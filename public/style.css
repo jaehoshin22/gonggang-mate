@@ -298,9 +298,17 @@ body.no-scroll { overflow: hidden; }
 .people-head .link-btn { padding: 0; font-size: 13px; }
 .people { display: flex; flex-wrap: wrap; gap: 6px; }
 .people button {
+  display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--line); background: var(--bg); color: var(--muted);
   padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer;
 }
-.people button.on { background: var(--text); border-color: var(--text); color: #fff; }
-.people button.locked { background: var(--accent); border-color: var(--accent); color: #fff; cursor: default; opacity: 1; }
+/* 켜짐: 연한 파랑 + 파란 테두리 + 체크 / 나: 진한 파랑(항상 켜짐) / 꺼짐: 흰 배경 + 회색 */
+.people button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.people button.locked { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: default; opacity: 1; }
+.people button.on::before, .people button.locked::before {
+  content: ""; width: 9px; height: 5px; margin-top: -3px;
+  border-left: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.people-summary { margin: 8px 0 0; font-size: 13px; color: var(--accent); font-weight: 600; }
 .people-box .hint { margin-top: 8px; }
