@@ -51,6 +51,17 @@ const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
 // 90 -> '1시간 30분', 120 -> '2시간', 30 -> '30분'
 const fmtMinutes = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ');
+// img/icons.svg 의 아이콘을 SVG 요소로 만든다
+function icon(name, size = 18) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `img/icons.svg#${name}`);
+  svg.append(use);
+  return svg;
+}
 const errText = (err) => (err instanceof TypeError ? '서버에 연결하지 못했어요.' : err.message);
 
 async function api(path, options) {
@@ -220,20 +231,21 @@ function myName() {
 
 async function shareLink(e) {
   const link = groupLink(state.group.id);
-  const btn = e.currentTarget;
-  const label = btn.textContent;
+  const lbl = e.currentTarget.querySelector('.lbl');
   if (navigator.share) {
     navigator.share({ title: '공강메이트', text: `${state.group.name || '공강 그룹'} 공강 맞추기`, url: link }).catch(() => {});
     return;
   }
   try {
     await navigator.clipboard.writeText(link);
-    btn.textContent = '링크를 복사했어요';
+    lbl.textContent = '링크를 복사했어요';
   } catch {
     window.prompt('링크를 복사해 주세요', link);
   }
-  setTimeout(() => { btn.textContent = label; }, 2000);
+  setTimeout(() => { lbl.textContent = '링크 공유'; }, 2000);
 }
+
+const shareButton = (cls) => el('button', { class: cls, type: 'button', onclick: shareLink }, [icon('share', 16), el('span', { class: 'lbl', text: '링크 공유' })]);
 
 function renderGroup() {
   const g = state.group;
@@ -246,7 +258,7 @@ function renderGroup() {
     ]),
     el('div', { class: 'head-actions' }, [
       refreshButton(),
-      el('button', { id: 'share-btn', class: 'btn btn-ghost btn-small', type: 'button', text: '링크 공유', onclick: shareLink }),
+      shareButton('btn btn-ghost btn-small btn-icon'),
     ]),
   );
 
@@ -264,7 +276,7 @@ function renderGroup() {
       ? el('div', { class: 'empty-box' }, [
         el('strong', { text: `지금 ${g.members.length}명 참여 중` }),
         el('p', { text: '한 명만 더 올리면 같이 비는 시간이 보여요' }),
-        el('button', { class: 'btn btn-primary btn-small', type: 'button', text: '링크 공유', onclick: shareLink }),
+        shareButton('btn btn-primary btn-small btn-icon'),
       ])
       : el('div', { class: 'empty-box' }, [
         el('strong', { text: '아직 아무도 없어요' }),
@@ -276,7 +288,7 @@ function renderGroup() {
 }
 
 // 새로고침 버튼 (자동 갱신은 15초마다 따로 돈다)
-const REFRESH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+const REFRESH_ICON = '<svg width="18" height="18" aria-hidden="true"><use href="img/icons.svg#rotate-cw"/></svg>';
 let refreshing = false;
 function refreshButton() {
   const btn = el('button', { class: `icon-round${refreshing ? ' spin' : ''}`, type: 'button', 'aria-label': '새로고침', title: '새로고침' });
@@ -352,7 +364,7 @@ function openDetail(s, me) {
     el('div', { class: 'modal-card' }, [
       el('div', { class: 'modal-top' }, [
         el('h3', { text: `${s.day_label}요일 ${s.start}–${s.end}` }),
-        el('button', { class: 'modal-close', type: 'button', 'aria-label': '닫기', text: '×', onclick: closeDetail }),
+        el('button', { class: 'modal-close', type: 'button', 'aria-label': '닫기', onclick: closeDetail }, [icon('x', 18)]),
       ]),
       el('p', { class: 'modal-sub', text: `${fmtMinutes(s.minutes)} · ${s.everyone ? `전원 ${s.count}명` : `${s.count}명`}` }),
       el('ul', { class: 'modal-names' }, s.names.map((n) => el('li', { class: n === me ? 'me' : '', text: n === me ? `${n} (나)` : n }))),

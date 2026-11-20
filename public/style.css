@@ -221,7 +221,7 @@ body.no-scroll { overflow: hidden; }
 }
 .modal-top { display: flex; justify-content: space-between; align-items: center; }
 .modal-top h3 { margin: 0; font-size: 18px; }
-.modal-close { border: none; background: var(--surface); width: 32px; height: 32px; border-radius: 50%; font-size: 20px; line-height: 32px; cursor: pointer; color: var(--text); }
+.modal-close { border: none; background: var(--surface); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
 .modal-sub { margin: 4px 0 12px; color: var(--muted); font-size: 14px; }
 .modal-names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .modal-names li { padding: 6px 12px; border-radius: 999px; background: var(--surface); font-size: 14px; }
@@ -255,4 +255,6 @@ body.home .app-header { background: transparent; border-bottom-color: transparen
 .btn-arrow { display: flex; align-items: center; justify-content: center; gap: 6px; }
 #step-home .note { margin-top: 16px; font-size: 12px; }
 .note-info { display: flex; align-items: center; justify-content: center; gap: 5px; }
-.note-info svg { color: #b7b3c9; flex: none; }
+.note-info svg { color: #9d99b5; flex: none; }
+
+.btn-icon { display: inline-flex; align-items: center; gap: 6px; }
