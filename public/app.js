@@ -84,6 +84,7 @@ function setMine(gid, value) {
 function go(step) {
   state.step = step;
   closeDetail();
+  document.body.classList.toggle('home', step === 'home');
   document.querySelectorAll('main > .step').forEach((s) => { s.hidden = s.id !== `step-${step}`; });
   if (step === 'review') renderReview();
   if (step === 'group') renderGroup();

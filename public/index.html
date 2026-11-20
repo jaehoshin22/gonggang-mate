@@ -12,23 +12,32 @@
 </head>
 <body>
   <header class="app-header">
-    <h1><a href="/" class="home-link">공강메이트</a></h1>
+    <h1><a href="/" class="home-link">
+      <svg class="logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8f7dff"/><stop offset="1" stop-color="#5b48e0"/></linearGradient></defs><rect x="2" y="4" width="20" height="18" rx="5" fill="url(#lg)"/><rect x="6.5" y="1.5" width="2.6" height="5" rx="1.3" fill="#5b48e0"/><rect x="14.9" y="1.5" width="2.6" height="5" rx="1.3" fill="#5b48e0"/><path d="M8 13.5l2.8 2.8L16 11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      공강메이트</a></h1>
   </header>
 
   <main>
     <!-- 첫 화면: 그룹 만들기 -->
     <section id="step-home" class="step" hidden>
       <div class="hero">
-        <h2>친구들과 겹치는 공강, 링크 하나로 찾기</h2>
-        <p>링크를 카톡방에 올리면, 각자 올린 시간표로 같이 비는 시간을 찾아 줘요.</p>
+        <img class="hero-art" src="img/hero-calendar.svg" alt="" width="220" height="200">
+        <h2>친구들과 겹치는 공강,<br>이제는 <em>한눈에!</em></h2>
+        <p>링크를 카톡방에 공유하고,<br>각자 올린 시간표에서 같이 비는 시간을 찾아보세요.</p>
       </div>
+
       <label class="field">
         <span>그룹 이름 (선택)</span>
         <input id="group-name" maxlength="30" placeholder="예: 소융 밥약">
       </label>
-      <button id="create-group" class="btn btn-primary" type="button">그룹 만들고 링크 받기</button>
+      <button id="create-group" class="btn btn-primary btn-arrow" type="button">그룹 만들고 링크 받기
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
       <p id="home-error" class="error-text" hidden></p>
-      <p class="note">캡처는 인식에만 쓰고 저장하지 않아요. 이름과 수업 시간만 저장돼요.</p>
+      <p class="note note-info">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 11v6M12 7.5v.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+        캡처는 인식에만 쓰고 저장하지 않아요.
+      </p>
     </section>
 
     <!-- 그룹 결과: 주간 시간표가 메인 -->
