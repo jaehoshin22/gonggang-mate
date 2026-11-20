@@ -8,8 +8,8 @@ const GRID_END = 18 * 60;
 const MAX_UPLOAD = 4 * 1024 * 1024;
 const REFRESH_MS = 15000; // 그룹 화면 자동 새로고침 간격
 const PALETTE = ['#f28c8c', '#82b4f0', '#8ccda0', '#f5be6e', '#b496e1', '#6ec8c8', '#f0a0c8', '#c8be78'];
-const PEOPLE_OPTIONS = [2, 3, 'all'];   // 최소 참여 인원
-const MINUTE_OPTIONS = [30, 60, 120];   // 최소 공강 시간
+const HOUR_PX = 64;      // 결과 그리드 1시간 높이 (style.css .tt.tall --hour 와 같게)
+const LINE_PX = 13.6;    // 칸 안 글자 한 줄 높이
 
 // ---- 상태 ----------------------------------------------------------------
 const state = {
@@ -18,7 +18,6 @@ const state = {
   result: null,     // /api/free 응답
   joinFile: null,
   draft: null,      // 확인 화면에서 고치는 내 시간표 {name, status, error, warnings, classes, gridStart}
-  filter: { people: 2, minutes: 30 },
 };
 let nextId = 1;
 let refreshTimer = null;
@@ -253,8 +252,6 @@ function renderGroup() {
   }));
 
   const panel = $('#group-result');
-  const filters = $('#filters');
-  filters.replaceChildren();
   if (g.error) {
     panel.replaceChildren(el('p', { class: 'error-text', text: g.error }));
   } else if (g.members.length < 2 || !state.result) {
@@ -262,7 +259,6 @@ function renderGroup() {
       ? `지금 ${g.members.length}명이 올렸어요. 두 명 이상 올리면 같이 비는 시간이 보여요. 링크를 카톡방에 공유해 주세요.`
       : '아직 아무도 올리지 않았어요. 먼저 내 시간표를 올리고 링크를 카톡방에 공유해 주세요.' }));
   } else {
-    renderFilters(filters, state.result.member_count);
     renderResult(panel, state.result, me);
   }
 
@@ -271,51 +267,44 @@ function renderGroup() {
     : '';
 }
 
-// ---- 필터: 최소 참여 인원, 최소 공강 시간 --------------------------------------
-function renderFilters(box, total) {
-  const row = (label, options, key, text, disabled) => el('div', { class: 'filter-row' }, [
-    el('span', { class: 'filter-label', text: label }),
-    el('div', { class: 'seg', role: 'group', 'aria-label': label }, options.map((v) => el('button', {
-      type: 'button',
-      class: state.filter[key] === v ? 'on' : '',
-      'aria-pressed': String(state.filter[key] === v),
-      disabled: disabled(v),
-      text: text(v),
-      onclick: () => { state.filter[key] = v; renderGroup(); },
-    }))),
-  ]);
-  if (state.filter.people === 3 && total < 3) state.filter.people = 2;
-  box.append(
-    row('인원', PEOPLE_OPTIONS, 'people', (v) => (v === 'all' ? `전원 ${total}명` : `${v}명 이상`), (v) => v === 3 && total < 3),
-    row('시간', MINUTE_OPTIONS, 'minutes', (v) => `${fmtMinutes(v)} 이상`, () => false),
-  );
-}
-
-function filteredSegments(r) {
-  const need = state.filter.people === 'all' ? r.member_count : state.filter.people;
-  return r.segments.filter((s) => s.count >= need && s.minutes >= state.filter.minutes);
-}
-
 // ---- 결과: 주간 시간표 각 칸에 같이 비는 사람 이름 -----------------------------
+// 색은 '나'에게만: 내가 포함된 칸은 강조, 나머지는 약하게
+// 칸 높이에 맞춰 내용 줄이기: 맨 위 인원 수, 그 아래 이름, 넘치면 '외 N명'
+function slotContent(s, me) {
+  const mine = me && s.names.includes(me);
+  const names = mine ? [me, ...s.names.filter((n) => n !== me)] : s.names;
+  const name = (n) => el('span', { class: n === me ? 'me' : '', text: n });
+  const lines = Math.max(1, Math.floor(((s.minutes / 60) * HOUR_PX - 6) / LINE_PX));
+  if (lines === 1) {
+    // 30분 안팎의 짧은 칸: 인원 수만, 이름은 눌러서 확인
+    return [el('span', { class: mine ? 'count me' : 'count', text: `${s.count}명` })];
+  }
+  const room = lines - 1; // 인원 수 줄 제외
+  const shown = names.length <= room ? names : names.slice(0, room - 1);
+  const rest = names.length - shown.length;
+  return [
+    el('span', { class: 'count', text: `${s.count}명` }),
+    ...shown.map(name),
+    rest ? el('span', { class: 'more', text: `외 ${rest}명` }) : null,
+  ];
+}
+
+// ---- 결과: 주간 시간표 각 칸에 같이 비는 사람 (30분 미만은 서버에서 제외) ------------
 // 색은 '나'에게만: 내가 포함된 칸은 강조, 나머지는 약하게
 function renderResult(panel, r, me) {
   panel.replaceChildren();
-  const segs = filteredSegments(r);
+  const segs = r.segments;
   if (!segs.length) {
-    panel.append(el('div', { class: 'empty-box', text: '조건에 맞는 공강이 없어요. 인원이나 시간 조건을 낮춰 보세요.' }));
+    panel.append(el('div', { class: 'empty-box', text: '수업 사이에 30분 이상 같이 비는 시간이 아직 없어요.' }));
     return;
   }
-  const blocks = segs.map((s) => {
-    const mine = me && s.names.includes(me);
-    const names = mine ? [me, ...s.names.filter((n) => n !== me)] : s.names;
-    return {
-      ...s,
-      className: `slot ${mine ? 'mine' : 'other'}`,
-      title: `${s.day_label} ${s.start}–${s.end} ${s.names.join(', ')}`,
-      content: names.map((n) => el('span', { class: n === me ? 'me' : '', text: n })),
-      onclick: () => openDetail(s, me),
-    };
-  });
+  const blocks = segs.map((s) => ({
+    ...s,
+    className: `slot ${me && s.names.includes(me) ? 'mine' : 'other'}`,
+    title: `${s.day_label} ${s.start}–${s.end} ${s.names.join(', ')}`,
+    content: slotContent(s, me),
+    onclick: () => openDetail(s, me),
+  }));
   const days = segs.some((s) => s.day === 'SAT') ? DAYS : DAYS.slice(0, 5);
   panel.append(renderTimetable(blocks, days, { tall: true }));
   panel.append(el('div', { class: 'legend' }, [

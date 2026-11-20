@@ -170,18 +170,6 @@ select, input[type="time"] {
 .alert .row-inline { margin: 8px 0 0; }
 .sub { color: var(--muted); font-size: 13px; }
 
-/* ---- 필터 ---- */
-.filters { display: grid; gap: 8px; margin: 14px 0 12px; }
-.filter-row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; }
-.filter-label { font-size: 13px; color: var(--muted); }
-.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
-.seg button {
-  border: none; background: none; color: var(--muted); white-space: nowrap;
-  padding: 7px 4px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer;
-}
-.seg button.on { background: var(--bg); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
-.seg button:disabled { opacity: .35; cursor: default; }
-
 /* ---- 결과 그리드: 30분 눈금, 칸 안에 이름 ---- */
 .tt.tall { --hour: 64px; }
 .tt.tall .tt-col {
@@ -196,6 +184,9 @@ select, input[type="time"] {
   padding: 3px 4px; cursor: pointer; border: 1px solid var(--line);
 }
 .tt-block.slot span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-block.slot .count { font-size: 10px; font-weight: 600; opacity: .75; }
+.tt-block.slot .more { opacity: .75; }
+#group-result { margin-top: 14px; }
 .tt-block.mine { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .tt-block.mine .me { font-weight: 700; color: var(--accent); }
 .tt-block.other { background: var(--surface); color: var(--muted); }
