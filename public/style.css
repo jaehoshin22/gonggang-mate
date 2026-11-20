@@ -203,9 +203,8 @@ select, input[type="time"] {
 .source-check strong { color: var(--text); font-size: 14px; }
 .source-thumb {
   width: 64px; height: 96px; object-fit: cover; object-position: top;
-  border-radius: 6px; background: var(--surface); cursor: zoom-in;
+  border-radius: 6px; background: var(--surface);
 }
-.source-thumb.zoom { position: fixed; inset: 0; z-index: 20; width: 100%; height: 100%; object-fit: contain; background: rgba(0,0,0,.85); border-radius: 0; cursor: zoom-out; }
 
 /* ---- 첫 화면 / 그룹 (F7) ---- */
 .home-link { color: inherit; text-decoration: none; }
@@ -253,3 +252,54 @@ select, input[type="time"] {
 .review-error p:last-child { margin-bottom: 0; }
 .conflict-actions { display: grid; gap: 6px; }
 .conflict-actions .btn { width: 100%; }
+
+/* ---- 라이트박스: 캡처는 자르지 않고 조금 작게, 뒤 화면은 어둡고 흐리게 ---- */
+.zoomable { cursor: zoom-in; }
+body.no-scroll { overflow: hidden; }
+.lightbox {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: 7vh 6vw;
+  background: rgba(15, 17, 20, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity .16s ease;
+}
+.lightbox.open { opacity: 1; }
+.lightbox-img {
+  max-width: 86vw; max-height: 84vh; width: auto; height: auto;
+  object-fit: contain; border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+  transform: scale(.96); transition: transform .16s ease;
+}
+.lightbox.open .lightbox-img { transform: scale(1); }
+.lightbox-close {
+  position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px;
+  width: 40px; height: 40px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, .92); color: var(--text);
+  font-size: 24px; line-height: 40px; cursor: pointer;
+}
+
+/* ---- 혼자 비교: 내 시간표 먼저 ---- */
+.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.me-name { font-weight: 600; padding: 8px 2px; }
+.me-name.review { margin: 16px 0 10px; font-size: 15px; }
+.link-btn {
+  border: none; background: none; padding: 8px 2px; color: var(--accent);
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+#me-slot .member-cards { margin: 0; }
+#me-slot .link-btn { display: block; margin: 6px auto 0; }
+
+/* ---- 같이 볼 사람 토글 ---- */
+.people-box { margin: 14px 0 0; }
+.people-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.people-head .link-btn { padding: 0; font-size: 13px; }
+.people { display: flex; flex-wrap: wrap; gap: 6px; }
+.people button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer;
+}
+.people button.on { background: var(--text); border-color: var(--text); color: #fff; }
+.people button.locked { background: var(--accent); border-color: var(--accent); color: #fff; cursor: default; opacity: 1; }
+.people-box .hint { margin-top: 8px; }

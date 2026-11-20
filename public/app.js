@@ -21,6 +21,7 @@ const state = {
   group: null,      // {id, name, members: [{id, name, classes}]}
   groupResult: null,
   joinFile: null,
+  deselected: new Set(), // 결과 비교에서 끈 사람 (id). 나는 끌 수 없음
 };
 let nextId = 1;
 let refreshTimer = null;
@@ -65,9 +66,10 @@ function getMember(id) {
   return state.members.find((m) => m.id === id);
 }
 
-function newMember({ name = '', file = null, classes = [] } = {}) {
+function newMember({ name = '', file = null, classes = [], isMe = false } = {}) {
   return {
     id: nextId++,
+    isMe,
     name,
     file,
     preview: file ? URL.createObjectURL(file) : null,
@@ -108,6 +110,45 @@ function setMine(gid, value) {
     if (value) localStorage.setItem(mineKey(gid), JSON.stringify(value));
     else localStorage.removeItem(mineKey(gid));
   } catch { /* 저장 불가 브라우저는 무시 */ }
+}
+
+// ---- 라이트박스: 썸네일을 누르면 캡처 전체를 가운데에 띄우고 뒤 화면은 어둡고 흐리게 ----
+let lightbox = null;
+
+function openLightbox(src, alt) {
+  if (lightbox) return;
+  const box = el('div', {
+    class: 'lightbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': alt,
+    onclick: (e) => { if (e.target === box) closeLightbox(); }, // 바깥 누르면 닫기
+  }, [
+    el('img', { class: 'lightbox-img', src, alt }),
+    el('button', { class: 'lightbox-close', type: 'button', 'aria-label': '닫기', text: '\u00d7', onclick: () => closeLightbox() }),
+  ]);
+  document.body.append(box);
+  document.body.classList.add('no-scroll');
+  requestAnimationFrame(() => box.classList.add('open'));
+  history.pushState({ lightbox: true }, ''); // 휴대폰 뒤로 가기로 닫히게
+  lightbox = box;
+}
+
+function closeLightbox(fromHistory = false) {
+  if (!lightbox) return;
+  const box = lightbox;
+  lightbox = null;
+  box.classList.remove('open');
+  document.body.classList.remove('no-scroll');
+  setTimeout(() => box.remove(), 160);
+  if (!fromHistory) history.back();
+}
+
+window.addEventListener('popstate', () => closeLightbox(true));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+function zoomableThumb(className, src, alt) {
+  return el('img', {
+    class: `${className} zoomable`, src, alt, title: '눌러서 크게 보기',
+    onclick: () => openLightbox(src, alt),
+  });
 }
 
 // ---- 화면 전환 -------------------------------------------------------------
@@ -218,6 +259,47 @@ function syncChips() {
   });
 }
 
+// ---- 같이 볼 사람 고르기: 이름을 토글로 켜고 꺼서 조합 (나는 항상 포함) -----------------
+function selectedMembers(members, meId) {
+  return members.filter((m) => m.id === meId || !state.deselected.has(m.id));
+}
+
+function renderPeople(container, members, meId, onChange) {
+  container.replaceChildren();
+  if (members.length < 2) return;
+  const anyOff = members.some((m) => m.id !== meId && state.deselected.has(m.id));
+  container.append(el('div', { class: 'people-head' }, [
+    el('span', { text: '같이 볼 사람' }),
+    anyOff ? el('button', {
+      class: 'link-btn', type: 'button', text: '전체 선택',
+      onclick: () => { state.deselected.clear(); onChange(); },
+    }) : null,
+  ]));
+  const row = el('div', { class: 'people', role: 'group', 'aria-label': '같이 볼 사람' });
+  // 나를 맨 앞에
+  const ordered = [...members].sort((a, b) => (b.id === meId) - (a.id === meId));
+  for (const m of ordered) {
+    const isMe = m.id === meId;
+    const on = isMe || !state.deselected.has(m.id);
+    row.append(el('button', {
+      type: 'button',
+      class: isMe ? 'locked' : on ? 'on' : '',
+      'aria-pressed': String(on),
+      disabled: isMe,
+      text: isMe ? (m.isMe ? '나' : `${m.name} (나)`) : m.name,
+      onclick: () => {
+        if (state.deselected.has(m.id)) state.deselected.delete(m.id);
+        else state.deselected.add(m.id);
+        onChange();
+      },
+    }));
+  }
+  container.append(row);
+  if (!meId) {
+    container.append(el('p', { class: 'hint', text: '내 시간표를 올리면 나는 항상 포함되고, 친구를 골라 1:1로도 볼 수 있어요.' }));
+  }
+}
+
 function renderResult(panel, r) {
   panel.replaceChildren();
   const showPartial = r.common.length === 0 && r.partial.length > 0;
@@ -307,9 +389,14 @@ async function loadGroup(silent = false) {
   if (state.step === 'group') renderGroup();
 }
 
+function groupMeId() {
+  const mine = getMine(state.group.id);
+  return mine && state.group.members.some((m) => m.id === mine.memberId) ? mine.memberId : null;
+}
+
 async function computeGroupFree() {
-  const members = state.group.members;
-  state.groupResult = members.length >= 2 ? await fetchFree(members) : null;
+  const selected = selectedMembers(state.group.members, groupMeId());
+  state.groupResult = selected.length >= 2 ? await fetchFree(selected) : null;
 }
 
 function renderGroup() {
@@ -355,14 +442,22 @@ function renderGroup() {
     onclick: () => { state.joinFile = null; go('join'); },
   }));
 
-  // 결과
+  // 같이 볼 사람 + 결과
   const panel = $('#group-result');
+  const meId = groupMeId();
+  renderPeople($('#group-people'), g.members, meId, async () => {
+    await computeGroupFree();
+    renderGroup();
+  });
   if (g.error) {
     panel.replaceChildren(el('p', { class: 'error-text', text: g.error }));
   } else if (g.members.length < 2) {
     panel.replaceChildren(el('div', { class: 'empty-box', text: g.members.length
       ? `지금 ${g.members.length}명이 올렸어요. 두 명 이상 올리면 같이 비는 시간이 보여요.`
       : '아직 아무도 올리지 않았어요. 먼저 내 시간표를 올려 보세요.' }));
+  } else if (selectedMembers(g.members, meId).length < 2) {
+    panel.replaceChildren(el('div', { class: 'empty-box', text: meId
+      ? '같이 볼 친구를 한 명 이상 골라 주세요.' : '같이 볼 사람을 두 명 이상 골라 주세요.' }));
   } else if (state.groupResult) {
     renderResult(panel, state.groupResult);
   }
@@ -419,6 +514,8 @@ function renderJoin() {
   const preview = $('#join-preview');
   if (state.joinFile) {
     preview.src = URL.createObjectURL(state.joinFile);
+    preview.onclick = () => openLightbox(preview.src, '선택한 캡처');
+    preview.classList.add('zoomable');
     preview.hidden = false;
     $('#join-file-label').textContent = '다른 캡처로 바꾸기';
   } else {
@@ -525,9 +622,19 @@ function showNameConflict(name) {
 // =============================================================================
 // 혼자 비교 모드: 한 사람이 여러 장을 올린다
 // =============================================================================
-function addSoloMember(file) {
-  const index = state.members.length;
-  state.members.push(newMember({ name: index === 0 ? '나' : `친구${index}`, file }));
+// 1단계 = 내 시간표 1장, 2단계 = 친구 시간표 여러 장. 나는 항상 첫 번째 멤버
+const soloMe = () => state.members.find((m) => m.isMe);
+const soloFriends = () => state.members.filter((m) => !m.isMe);
+
+function setSoloMe(file) {
+  const old = soloMe();
+  if (old && old.preview) URL.revokeObjectURL(old.preview);
+  const me = newMember({ name: '나', file, isMe: true });
+  state.members = [me, ...soloFriends()];
+}
+
+function addSoloFriend(file) {
+  state.members.push(newMember({ name: `친구${soloFriends().length + 1}`, file }));
 }
 
 function removeMember(id) {
@@ -542,25 +649,49 @@ const STATUS_TEXT = {
   error: '인식 실패 · 직접 입력 가능', manual: '직접 입력',
 };
 
+function memberCard(m) {
+  return el('li', { class: 'member-card' }, [
+    m.preview
+      ? zoomableThumb('thumb', m.preview, `${m.isMe ? '내' : m.name} 시간표 캡처`)
+      : el('div', { class: 'thumb', text: '직접' }),
+    el('div', {}, [
+      m.isMe
+        ? el('div', { class: 'me-name', text: '나' })
+        : el('input', { value: m.name, 'aria-label': '친구 이름', maxlength: 20, oninput: (e) => { m.name = e.target.value; } }),
+      el('div', { class: `status ${m.status}`, text: m.error || STATUS_TEXT[m.status] }),
+    ]),
+    el('button', { class: 'icon-btn danger', type: 'button', text: '삭제', onclick: () => removeMember(m.id) }),
+  ]);
+}
+
 function renderUpload() {
-  const list = $('#member-cards');
-  list.replaceChildren();
-  for (const m of state.members) {
-    list.append(el('li', { class: 'member-card' }, [
-      m.preview
-        ? el('img', { class: 'thumb', src: m.preview, alt: `${m.name} 시간표 캡처` })
-        : el('div', { class: 'thumb', text: '직접' }),
-      el('div', {}, [
-        el('input', { value: m.name, 'aria-label': '이름', maxlength: 20, oninput: (e) => { m.name = e.target.value; } }),
-        el('div', { class: `status ${m.status}`, text: m.error || STATUS_TEXT[m.status] }),
+  const me = soloMe();
+  const slot = $('#me-slot');
+  if (me) {
+    slot.replaceChildren(el('ul', { class: 'member-cards' }, [memberCard(me)]));
+  } else {
+    slot.replaceChildren(
+      el('label', { class: 'upload-box', for: 'me-file' }, [
+        el('strong', { text: '내 시간표 캡처 선택' }),
+        el('span', { text: '에브리타임 시간표 탭 화면 1장' }),
       ]),
-      el('button', { class: 'icon-btn danger', type: 'button', text: '삭제', onclick: () => removeMember(m.id) }),
-    ]));
+      el('button', {
+        class: 'link-btn', type: 'button', text: '캡처 없이 직접 입력하기',
+        onclick: () => { setSoloMe(null); renderUpload(); },
+      }),
+    );
   }
+
+  const list = $('#member-cards');
+  list.replaceChildren(...soloFriends().map(memberCard));
+
   const pending = state.members.filter((m) => m.file && m.status !== 'done').length;
   const btn = $('#start-parse');
-  btn.disabled = state.members.length === 0;
-  btn.textContent = pending ? `시간표 인식하기 (${pending}장)` : '다음';
+  const ready = me && soloFriends().length > 0;
+  btn.disabled = !ready;
+  if (!me) btn.textContent = '내 시간표를 먼저 올려 주세요';
+  else if (!soloFriends().length) btn.textContent = '친구 시간표를 올려 주세요';
+  else btn.textContent = pending ? `시간표 인식하기 (${pending}장)` : '다음';
 }
 
 async function parseAll() {
@@ -576,9 +707,16 @@ async function parseAll() {
 
 async function findFreeSolo() {
   const panel = $('#result-panel');
+  const me = soloMe();
+  renderPeople($('#solo-people'), state.members, me && me.id, findFreeSolo);
+  const selected = selectedMembers(state.members, me && me.id);
+  if (selected.length < 2) {
+    panel.replaceChildren(el('div', { class: 'empty-box', text: '비교할 친구를 한 명 이상 골라 주세요.' }));
+    return;
+  }
   panel.replaceChildren(el('p', { class: 'loading', text: '공강을 찾는 중...' }));
   try {
-    state.result = await fetchFree(state.members);
+    state.result = await fetchFree(selected);
     renderResult(panel, state.result);
   } catch (err) {
     panel.replaceChildren(el('p', { class: 'error-text', text: errText(err) }));
@@ -659,22 +797,23 @@ function renderReview() {
     return;
   }
 
-  // 이름 (원본 캡처 위쪽 이름을 보며 고칠 수 있게 맨 위에)
-  panel.append(el('label', { class: 'field' }, [
-    el('span', { text: group ? '내 이름' : '이름' }),
-    el('input', {
-      id: 'review-name', value: m.name, maxlength: 20, placeholder: '이름',
-      oninput: (e) => { m.name = e.target.value; if (!group) renderTabs(); },
-    }),
-  ]));
+  // 이름 (원본 캡처 위쪽 이름을 보며 고칠 수 있게 맨 위에). 혼자 비교의 내 시간표는 '나'로 고정
+  if (m.isMe) {
+    panel.append(el('p', { class: 'me-name review', text: '내 시간표' }));
+  } else {
+    panel.append(el('label', { class: 'field' }, [
+      el('span', { text: group ? '내 이름' : '친구 이름' }),
+      el('input', {
+        id: 'review-name', value: m.name, maxlength: 20, placeholder: '이름',
+        oninput: (e) => { m.name = e.target.value; if (!group) renderTabs(); },
+      }),
+    ]));
+  }
 
   // 원본 캡처와 학기 확인 안내 (지난 학기 캡처를 잘못 올리는 경우 대비)
   if (m.preview) {
     panel.append(el('div', { class: 'source-check' }, [
-      el('img', {
-        class: 'source-thumb', src: m.preview, alt: `${m.name} 원본 캡처`,
-        onclick: (e) => e.target.classList.toggle('zoom'), // 눌러서 크게 보기
-      }),
+      zoomableThumb('source-thumb', m.preview, `${m.isMe ? '내' : m.name} 원본 캡처`),
       el('p', {}, [
         el('strong', { text: `${currentSemester()} 시간표가 맞나요?` }),
         el('br'),
@@ -744,12 +883,17 @@ function showReviewError(message) {
 // ---- 이벤트 연결 -----------------------------------------------------------
 $('#create-group').addEventListener('click', createGroup);
 
-$('#file-input').addEventListener('change', (e) => {
-  for (const file of e.target.files) addSoloMember(file);
+$('#me-file').addEventListener('change', (e) => {
+  if (e.target.files[0]) setSoloMe(e.target.files[0]);
   e.target.value = '';
   renderUpload();
 });
-$('#add-manual').addEventListener('click', () => { addSoloMember(null); renderUpload(); });
+$('#file-input').addEventListener('change', (e) => {
+  for (const file of e.target.files) addSoloFriend(file);
+  e.target.value = '';
+  renderUpload();
+});
+$('#add-manual').addEventListener('click', () => { addSoloFriend(null); renderUpload(); });
 $('#start-parse').addEventListener('click', parseAll);
 
 $('#join-file').addEventListener('change', (e) => {
@@ -767,6 +911,7 @@ $('#review-next').addEventListener('click', () => {
   }
   const problem = validateMembers();
   if (problem) return showReviewError(problem);
+  state.deselected.clear();
   go('result');
   findFreeSolo();
 });

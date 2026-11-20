@@ -34,7 +34,7 @@
       <button id="create-group" class="btn btn-primary" type="button">그룹 만들고 링크 받기</button>
       <p id="home-error" class="error-text" hidden></p>
       <div class="divider"><span>또는</span></div>
-      <button class="btn btn-ghost" type="button" data-go="upload">혼자 여러 장 올려서 비교하기</button>
+      <button class="btn btn-ghost" type="button" data-go="upload">캡처 모아서 한 번에 비교하기</button>
       <p class="note">캡처 이미지는 인식에만 쓰고 저장하지 않습니다. 그룹에는 이름과 수업 시간만 저장됩니다.</p>
     </section>
 
@@ -43,6 +43,7 @@
       <div id="group-head" class="group-head"></div>
       <div id="share-box" class="share-box"></div>
       <div id="my-action"></div>
+      <div id="group-people" class="people-box"></div>
       <div class="chips" data-chips role="radiogroup" aria-label="최소 시간">
         <button type="button" data-min="30">30분+</button>
         <button type="button" data-min="60">밥 60분</button>
@@ -76,19 +77,23 @@
       </div>
     </section>
 
-    <!-- 혼자 비교 1단계: 캡처 올리기 (F3) -->
+    <!-- 혼자 비교 1단계: 내 시간표 먼저, 그다음 친구들 (F3) -->
     <section id="step-upload" class="step" hidden>
-      <p class="lead">내 시간표와 친구들 시간표를 에브리타임에서 캡처해 한 번에 올려 주세요.</p>
+      <h2 class="section-title">1. 내 시간표</h2>
+      <div id="me-slot"></div>
+      <input id="me-file" type="file" accept="image/*" hidden>
 
+      <h2 class="section-title">2. 친구 시간표</h2>
+      <p class="hint">에브리타임에서 친구 시간표를 캡처해 올려 주세요. 썸네일을 누르면 크게 볼 수 있어요.</p>
       <label class="upload-box" for="file-input">
-        <strong>캡처 추가</strong>
+        <strong>친구 캡처 추가</strong>
         <span>여러 장 선택 가능 · 라이트·다크모드 모두 가능</span>
         <input id="file-input" type="file" accept="image/*" multiple hidden>
       </label>
 
       <ul id="member-cards" class="member-cards"></ul>
 
-      <button id="add-manual" class="btn btn-ghost" type="button">캡처 없이 직접 입력할 사람 추가</button>
+      <button id="add-manual" class="btn btn-ghost" type="button">캡처 없이 직접 입력할 친구 추가</button>
       <p class="note">이미지는 인식에만 쓰고 저장하지 않습니다.</p>
 
       <div class="bottom-bar">
@@ -109,6 +114,7 @@
 
     <!-- 혼자 비교 3단계: 공통 공강 (F4, F5, F6) -->
     <section id="step-result" class="step" hidden>
+      <div id="solo-people" class="people-box"></div>
       <div class="chips" data-chips role="radiogroup" aria-label="최소 시간">
         <button type="button" data-min="30">30분+</button>
         <button type="button" data-min="60">밥 60분</button>
