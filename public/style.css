@@ -96,22 +96,23 @@ select, input[type="time"] {
 .class-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .class-row {
   display: grid;
-  grid-template-columns: 8px 1fr auto 1fr auto;
+  /* 시작·끝 칸은 같은 폭(minmax(0,1fr)): 아이폰의 시간 입력 칸이 기본 폭 때문에 카드 밖으로 밀리지 않게 한다 */
+  grid-template-columns: 8px minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-areas:
-    "sw day day day del"
-    "sw start sep end end";
+    "sw day day del"
+    "sw start sep end";
   align-items: center; gap: 6px 8px;
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
 }
 .class-row.invalid { border-color: var(--danger); }
 .class-row .swatch { grid-area: sw; width: 8px; align-self: stretch; border-radius: 3px; }
 .class-row select { grid-area: day; justify-self: start; }
-.class-row .icon-btn { grid-area: del; }
+.class-row .icon-btn { grid-area: del; justify-self: end; }
 .class-row .t-start { grid-area: start; }
 .class-row .sep { grid-area: sep; }
 .class-row .t-end { grid-area: end; }
-.class-row input[type="time"] { width: 100%; min-width: 0; }
-.class-row .sep { color: var(--muted); }
+.class-row input[type="time"] { width: 100%; min-width: 0; max-width: 100%; }
+.class-row .sep { color: var(--muted); text-align: center; }
 .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
 
 /* 시간표 그리드 */
