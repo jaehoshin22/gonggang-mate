@@ -95,9 +95,44 @@ function setMine(gid, value) {
 }
 
 // ---- 화면 전환 -------------------------------------------------------------
+// 화면마다 브라우저 기록을 한 칸씩 남겨서 뒤로가기·앞으로가기가 사이트 안에서 움직이게 한다.
+//   첫 화면 /, 그룹 /?g=<id>, 혼자 비교하기 /?view=solo
+//   시간표 올리기·확인 화면과 팝업은 주소를 바꾸지 않고 기록만 한 칸 추가
+function stepUrl(step) {
+  if (step === 'home') return '/';
+  if (step === 'solo') return '/?view=solo';
+  if (step === 'group') return `/?g=${state.group.id}`;
+  return location.pathname + location.search;
+}
+
+function stepFromUrl() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('g')) return 'group';
+  if (params.get('view') === 'solo') return 'solo';
+  return 'home';
+}
+
+// 화면을 넘기고 기록을 한 칸 추가한다
 function go(step) {
+  const entry = { step, mode: state.mode };
+  const url = stepUrl(step);
+  if (history.state && history.state.modal) history.replaceState(entry, '', url);
+  else history.pushState(entry, '', url);
+  show(step);
+}
+
+// 올리기·확인 화면 두 칸을 걷어내고 부모 화면으로 (끝낸 뒤 뒤로가기가 확인 화면으로 가지 않게)
+function finishFlow(parent) {
+  state.draft = null;
+  state.joinFile = null;
+  if (history.state && history.state.step === 'review') history.go(-2);
+  else go(parent);
+}
+
+// 기록은 건드리지 않고 화면만 바꾼다
+function show(step) {
   state.step = step;
-  closeDetail();
+  removeModal();
   document.body.classList.toggle('home', step === 'home');
   document.querySelectorAll('main > .step').forEach((s) => { s.hidden = s.id !== `step-${step}`; });
   if (step === 'review') renderReview();
@@ -197,7 +232,6 @@ async function createGroup() {
   errBox.hidden = true;
   try {
     const data = await postJSON('/api/group', { action: 'create', name: $('#group-name').value });
-    history.replaceState(null, '', `/?g=${data.group_id}`);
     state.mode = 'group';
     $('#join-name').value = '';
     state.group = { id: data.group_id, name: '', members: [] };
@@ -568,7 +602,7 @@ async function saveResultImage(r, title) {
 }
 
 function openImageModal(url) {
-  closeDetail();
+  removeModal();
   const box = el('div', {
     class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '결과 이미지',
     onclick: (e) => { if (e.target === box) closeDetail(); },
@@ -589,7 +623,7 @@ function openImageModal(url) {
 let detail = null;
 
 function openDetail(s, me) {
-  closeDetail();
+  removeModal();
   const box = el('div', {
     class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '공강 상세',
     onclick: (e) => { if (e.target === box) closeDetail(); },
@@ -606,19 +640,32 @@ function openDetail(s, me) {
   showModal(box);
 }
 
+// 팝업도 기록 한 칸: 뒤로가기를 누르면 팝업만 닫힌다
 function showModal(box) {
   document.body.append(box);
   document.body.classList.add('no-scroll');
   requestAnimationFrame(() => box.classList.add('open'));
   detail = box;
+  const entry = { step: state.step, mode: state.mode, modal: true };
+  if (history.state && history.state.modal) history.replaceState(entry, '');
+  else history.pushState(entry, '');
 }
 
-function closeDetail() {
+// 화면에서만 지운다 (기록은 그대로)
+function removeModal() {
   if (!detail) return;
   const box = detail;
   detail = null;
   document.body.classList.remove('no-scroll');
   box.remove();
+}
+
+// 사용자가 닫을 때 (x, 바깥, Esc): 팝업이 만든 기록 한 칸도 같이 걷어낸다
+function closeDetail() {
+  if (!detail) return;
+  const viaHistory = history.state && history.state.modal;
+  removeModal();
+  if (viaHistory) history.back();
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
@@ -695,7 +742,7 @@ async function addToSolo() {
   $('#join-name').value = '';
   await computeSolo();
   btn.disabled = false;
-  go('solo');
+  finishFlow('solo');
 }
 
 // ---- 시간표 올리기 (그룹: 내 시간표, 혼자 비교하기: 여러 명) ------------------------------
@@ -761,7 +808,7 @@ async function saveToGroup(claim = false) {
     setMine(gid, { memberId: data.member_id, name: d.name.trim() });
     $('#join-name').value = '';
     await loadGroup();
-    go('group');
+    finishFlow('group');
   } catch (err) {
     if (err.code === 'NAME_TAKEN' && !mine) showNameConflict(d.name.trim());
     else showReviewError(err.code === 'NAME_TAKEN' ? `같은 이름을 다른 사람이 쓰고 있어요: ${d.name.trim()}` : errText(err));
@@ -917,20 +964,47 @@ $('#join-file').addEventListener('change', (e) => {
   renderJoin();
 });
 $('#join-next').addEventListener('click', joinParse);
-$('#join-cancel').addEventListener('click', () => go(state.mode === 'solo' ? 'solo' : 'group'));
-$('#review-back').addEventListener('click', () => go('join'));
+$('#join-cancel').addEventListener('click', () => history.back());
+$('#review-back').addEventListener('click', () => history.back());
 $('#review-next').addEventListener('click', () => (state.mode === 'solo' ? addToSolo() : saveToGroup()));
 $('#solo-start').addEventListener('click', startSolo);
 $('#solo-home').addEventListener('click', () => go('home'));
 
-// ---- 시작: 링크(?g=)로 들어왔으면 그룹 화면, 아니면 첫 화면 ---------------------------
+// ---- 뒤로가기·앞으로가기: 기록에 남긴 화면으로 되돌린다 ----------------------------
+window.addEventListener('popstate', (e) => {
+  if (detail) removeModal(); // 팝업이 열려 있으면 뒤로가기는 팝업만 닫는다
+  const st = e.state;
+  if (st && st.modal) return;
+  let step = st && st.step ? st.step : stepFromUrl();
+  if (st && st.mode) state.mode = st.mode;
+  else if (step === 'solo') state.mode = 'solo';
+  if (step === state.step) return;
+
+  if (step === 'group') {
+    const gid = new URLSearchParams(location.search).get('g');
+    if (gid && (!state.group || state.group.id !== gid)) {
+      state.group = { id: gid, name: '', members: [] };
+      loadGroup();
+    }
+  }
+  // 새로고침 등으로 인식 결과가 없으면 확인 화면은 열 수 없다: 부모 화면으로
+  if (step === 'review' && !state.draft) {
+    step = state.mode === 'solo' ? 'solo' : 'group';
+    history.replaceState({ step, mode: state.mode }, '', stepUrl(step));
+  }
+  show(step);
+});
+
+// ---- 시작: 주소를 보고 화면을 정한다 (?g= 그룹, ?view=solo 혼자 비교하기, 그 외 첫 화면) ----
 (async function start() {
-  const gid = new URLSearchParams(location.search).get('g');
-  if (!gid) {
-    go('home');
+  const step = stepFromUrl();
+  if (step === 'solo') state.mode = 'solo';
+  history.replaceState({ step, mode: state.mode }, '', location.href);
+  if (step !== 'group') {
+    show(step);
     return;
   }
-  state.group = { id: gid, name: '', members: [] };
-  go('group');
+  state.group = { id: new URLSearchParams(location.search).get('g'), name: '', members: [] };
+  show('group');
   await loadGroup();
 })();
