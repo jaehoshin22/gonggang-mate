@@ -71,6 +71,15 @@ const SCENES = [
     state.mode = 'solo'; state.solo = { members: [{ name: '재호', classes: [], me: true }], result: null, error: null, adding: 'friend' }; state.joinFile = null; show('join');
   } },
 
+  { title: '혼자 비교하기 (친구 3장 확인 중)', run: (d) => {
+    state.mode = 'solo';
+    state.solo = { members: [{ name: '재호', classes: d['재호'], me: true }], result: null, error: null, adding: 'friend' };
+    const mk = (n, i) => ({ name: '', status: 'done', error: null, warnings: [], gridStart: 9,
+      classes: d[n].map((c, k) => ({ ...c, id: 9200 + i * 100 + k, color: PALETTE[k % PALETTE.length] })) });
+    state.queue = ['민지', '서준', '유나'].map(mk); state.queueIndex = 0; state.draft = state.queue[0];
+    show('review');
+  } },
+
   { title: '그룹 (아무도 없음)', run: () => {
     state.mode = 'group'; state.group = { id: 'demo', name: '캡스톤 스터디', members: [], loadedAt: new Date() }; state.result = null; show('group');
   } },

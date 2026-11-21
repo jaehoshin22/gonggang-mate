@@ -20,6 +20,9 @@ const state = {
   group: null,      // {id, name, members: [{id, name, classes}]}
   result: null,     // /api/free 응답
   joinFile: null,
+  joinFiles: [],    // 혼자 비교하기에서 친구 시간표를 여러 장 고를 때
+  queue: null,      // 여러 장을 인식한 뒤 한 장씩 확인하는 초안 목록
+  queueIndex: 0,
   draft: null,      // 확인 화면에서 고치는 내 시간표 {name, status, error, warnings, classes, gridStart}
 };
 let nextId = 1;
@@ -125,6 +128,8 @@ function go(step) {
 function finishFlow(parent) {
   state.draft = null;
   state.joinFile = null;
+  state.joinFiles = [];
+  state.queue = null;
   if (history.state && history.state.step === 'review') history.go(-2);
   else go(parent);
 }
@@ -305,7 +310,7 @@ function renderGroup() {
   $('#my-action').replaceChildren(el('button', {
     class: `btn ${me ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
     text: me ? `${me} 시간표 다시 올리기` : '내 시간표 올리기',
-    onclick: () => { state.mode = 'group'; state.joinFile = null; go('join'); },
+    onclick: () => { state.mode = 'group'; state.joinFile = null; state.joinFiles = []; go('join'); },
   }));
 
   const panel = $('#group-result');
@@ -699,6 +704,7 @@ function openSoloUpload(who) {
   state.mode = 'solo';
   state.solo.adding = who;
   state.joinFile = null;
+  state.joinFiles = [];
   $('#join-name').value = '';
   go('join');
 }
@@ -710,6 +716,7 @@ function renderSolo() {
   $('#solo-sub').textContent = `${members.length}명 추가됨`;
   $('#solo-sub').hidden = !members.length;
 
+  // 내 시간표를 잘못 올렸으면 로고를 눌러 처음부터 다시 한다 (여기서는 바꾸거나 빼지 않는다)
   const actions = [];
   if (!me) {
     actions.push(el('button', { class: 'btn btn-primary', type: 'button', text: '내 시간표 올리기', onclick: () => openSoloUpload('me') }));
@@ -718,7 +725,6 @@ function renderSolo() {
       class: `btn ${friends ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
       text: '친구 시간표 추가', disabled: members.length >= SOLO_MAX, onclick: () => openSoloUpload('friend'),
     }));
-    actions.push(el('button', { class: 'btn btn-ghost', type: 'button', text: `${me.name} 시간표 다시 올리기`, onclick: () => openSoloUpload('me') }));
   }
   $('#solo-action').replaceChildren(...actions);
 
@@ -773,7 +779,23 @@ async function addToSolo() {
   $('#join-name').value = '';
   await computeSolo();
   btn.disabled = false;
+  if (!mine && nextInQueue()) return;
   finishFlow('solo');
+}
+
+// 여러 장을 한꺼번에 올렸다면 다음 장의 확인 화면으로 (없으면 false)
+function nextInQueue() {
+  const q = state.queue;
+  if (!q || state.queueIndex >= q.length - 1) return false;
+  state.queueIndex += 1;
+  state.draft = q[state.queueIndex];
+  renderReview();
+  window.scrollTo(0, 0);
+  return true;
+}
+
+function skipDraft() {
+  if (!nextInQueue()) finishFlow('solo');
 }
 
 // ---- 시간표 올리기 (그룹: 내 시간표, 혼자 비교하기: 여러 명) ------------------------------
@@ -783,25 +805,33 @@ function renderJoin() {
   $('#join-title').textContent = friend ? '친구 시간표 추가' : me ? '내 시간표 다시 올리기' : '내 시간표 올리기';
   $('#join-name-label').textContent = friend ? '친구 이름' : '내 이름';
   const nameInput = $('#join-name');
+  $('#join-name-field').hidden = friend; // 친구 시간표는 캡처를 먼저 받고, 이름은 확인 화면에서 한 장씩 적는다
+  $('#join-file').multiple = friend;
+  $('#join-file-sub').textContent = friend ? '여러 장을 한 번에 골라도 돼요' : '에브리타임 시간표 탭을 캡처해서 올려 주세요';
   nameInput.placeholder = friend ? '이 시간표 주인의 이름' : state.mode === 'solo' ? '내 이름' : '친구들이 알아볼 이름';
   if (!nameInput.value && me) nameInput.value = me;
   $('#join-error').hidden = true;
 
+  const files = friend ? state.joinFiles : state.joinFile ? [state.joinFile] : [];
   const preview = $('#join-preview');
-  if (state.joinFile) {
-    preview.src = URL.createObjectURL(state.joinFile);
+  if (files.length === 1) {
+    preview.src = URL.createObjectURL(files[0]);
     preview.hidden = false;
     $('#join-file-label').textContent = '다른 캡처로 바꾸기';
+  } else if (files.length > 1) {
+    preview.hidden = true;
+    $('#join-file-label').textContent = `${files.length}장 선택됨 · 다시 고르기`;
   } else {
     preview.hidden = true;
     $('#join-file-label').textContent = friend ? '친구 시간표 캡처 선택' : '내 시간표 캡처 선택';
   }
   const btn = $('#join-next');
   btn.textContent = '인식하기';
-  btn.disabled = !state.joinFile;
+  btn.disabled = !files.length;
 }
 
 async function joinParse() {
+  if (state.mode === 'solo' && state.solo.adding === 'friend') return joinParseFriends();
   const name = $('#join-name').value.trim();
   if (!name) {
     const box = $('#join-error');
@@ -815,6 +845,31 @@ async function joinParse() {
   btn.textContent = '인식 중...';
   state.draft = { name, status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9 };
   await parseDraft(state.draft, state.joinFile);
+  go('review');
+}
+
+// 친구 시간표: 고른 캡처를 차례로 인식하고, 이름은 확인 화면에서 한 장씩 적는다
+async function joinParseFriends() {
+  const files = state.joinFiles;
+  const room = SOLO_MAX - state.solo.members.length;
+  if (files.length > room) {
+    const box = $('#join-error');
+    box.textContent = `한 번에 ${SOLO_MAX}명까지 비교할 수 있어요. 지금은 ${room}장까지 고를 수 있어요.`;
+    box.hidden = false;
+    return;
+  }
+  const btn = $('#join-next');
+  btn.disabled = true;
+  const drafts = [];
+  for (let i = 0; i < files.length; i += 1) {
+    btn.textContent = files.length > 1 ? `인식 중 ${i + 1}/${files.length}` : '인식 중...';
+    const d = { name: '', status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9 };
+    await parseDraft(d, files[i]);
+    drafts.push(d);
+  }
+  state.queue = drafts;
+  state.queueIndex = 0;
+  state.draft = drafts[0];
   go('review');
 }
 
@@ -926,13 +981,21 @@ function renderReview() {
   panel.replaceChildren();
   $('#review-error').hidden = true;
   const friend = state.mode === 'solo' && state.solo.adding === 'friend';
-  $('#review-next').textContent = state.mode !== 'solo' ? '그룹에 저장' : friend ? '추가' : '저장';
+  const q = friend ? state.queue : null;
+  const more = !!q && state.queueIndex < q.length - 1;
+  $('#review-next').textContent = state.mode !== 'solo' ? '그룹에 저장' : friend ? (more ? '다음' : '추가') : '저장';
   if (!d) return;
 
-  panel.append(el('h2', { class: 'page-title', text: '인식 결과 확인' }));
+  const title = q && q.length > 1 ? `인식 결과 확인 (${state.queueIndex + 1}/${q.length})` : '인식 결과 확인';
+  panel.append(q && q.length > 1
+    ? el('div', { class: 'row-inline review-head' }, [
+      el('h2', { class: 'page-title', text: title }),
+      el('button', { class: 'btn btn-ghost btn-small', type: 'button', text: '건너뛰기', onclick: skipDraft }),
+    ])
+    : el('h2', { class: 'page-title', text: title }));
   panel.append(el('label', { class: 'field' }, [
     el('span', { text: friend ? '친구 이름' : '내 이름' }),
-    el('input', { id: 'review-name', value: d.name, maxlength: 20, placeholder: '이름', oninput: (e) => { d.name = e.target.value; } }),
+    el('input', { id: 'review-name', value: d.name, maxlength: 20, placeholder: friend ? '친구 이름' : '이름', oninput: (e) => { d.name = e.target.value; } }),
   ]));
 
   if (d.status === 'error') {
@@ -991,7 +1054,8 @@ function showReviewError(message) {
 // ---- 이벤트 연결 -----------------------------------------------------------
 $('#create-group').addEventListener('click', createGroup);
 $('#join-file').addEventListener('change', (e) => {
-  state.joinFile = e.target.files[0] || null;
+  state.joinFiles = Array.from(e.target.files);
+  state.joinFile = state.joinFiles[0] || null;
   e.target.value = '';
   renderJoin();
 });
