@@ -40,7 +40,7 @@ python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정
 ## 그룹 기능 설정 (Supabase)
 
 1. supabase.com 에서 새 프로젝트를 만든다 (Region: Northeast Asia (Seoul)).
-2. SQL Editor 에 `supabase/schema.sql` 전체를 붙여 넣고 Run.
+2. SQL Editor 에 `supabase/schema.sql` 전체를 붙여 넣고 Run. 이어서 `supabase/schedule.sql` 도 Run 하면 180일 지난 그룹이 매일 자동으로 지워진다.
 3. 두 값을 복사한다.
    - Project URL (`https://xxxx.supabase.co`)
    - Secret key (`sb_secret_...`). 예전 프로젝트라면 Legacy 탭의 `service_role` 키도 동작한다.
@@ -60,7 +60,7 @@ groups (id, name, created_at)
 
 - `get_group(그룹ID)`: `groups LEFT JOIN members LEFT JOIN classes` 로 그룹 전체를 한 번에 조회
 - `save_member(...)`: 멤버 추가·수정과 수업 목록 교체를 한 트랜잭션으로 처리. 같은 이름이면 `NAME_TAKEN`
-- `delete_old_groups(180)`: 180일 지난 그룹 정리
+- `delete_old_groups(180)`: 만든 지 180일 지난 그룹 정리. `supabase/schedule.sql` 이 pg_cron 으로 매일 실행한다.
 - `delete_member(...)`: 멤버 삭제. 화면에서 멤버를 뺄 수 있게 하지 않아서 현재는 쓰지 않는다.
 - 세 테이블 모두 RLS를 켜고 정책을 두지 않아, 공개 키로는 읽고 쓸 수 없다. 서버만 secret 키로 함수를 호출한다.
 
@@ -68,7 +68,7 @@ groups (id, name, created_at)
 
 - 그룹은 추측할 수 없는 UUID 링크(`?g=...`)로 구분한다. 링크를 가진 사람만 보고 올릴 수 있다.
 - 내가 올린 멤버 ID는 그 기기의 localStorage 에만 기억해서 "내 시간표 다시 올리기"와 결과 화면의 '나' 강조에 쓴다.
-- 같은 이름이 이미 있으면 "내가 그 사람이에요(덮어쓰기)" / "다른 사람이에요(이름 바꾸기)"를 묻는다.
+- 같은 이름은 이 기기에서 올린 본인 것만 다시 올릴 수 있고, 그 밖에는 이름을 바꾸게 한다(덮어쓰기 선택지 없음).
 
 ## 개인정보
 
@@ -77,7 +77,7 @@ groups (id, name, created_at)
 - 그룹에 저장하는 것은 이름과 수업 시간대(요일, 시작·끝 시각, 색)뿐이다. 공강을 계산하는 데 꼭 필요한 정보만 남긴다.
 - 그룹 링크를 아는 사람은 화면에 보이는 이름·공강 외에도, 서버 응답(`GET /api/group`)에 담긴 각 멤버의 수업 시간대를 볼 수 있다. 화면에는 표시하지 않는다.
 - 혼자 비교하기는 서버에 아무것도 저장하지 않는다.
-- 그룹은 자동으로 지워지지 않는다. `delete_old_groups(180)`을 실행하면 180일 지난 그룹을 정리한다.
+- 그룹은 만든 지 180일이 지나면 자동으로 지워진다(`supabase/schedule.sql` 의 매일 실행 작업). 이 작업을 등록하지 않으면 지워지지 않는다.
 
 ## 구조
 
@@ -91,6 +91,7 @@ api/group.py       GET/POST /api/group  그룹 만들기·조회·내 시간표 
 core/group.py      그룹 요청 검증·처리
 core/store.py      Supabase 호출 / 메모리 저장소
 supabase/schema.sql  테이블·SQL 함수·권한
+supabase/schedule.sql  오래된 그룹을 매일 지우는 예약 작업 (pg_cron)
 core/parser.py     이미지 인식 (Pillow, 규칙 기반)
 core/free.py       공강 계산 (5분 칸 288개, 같은 사람 조합이 이어진 구간으로 묶기)
 core/web.py        요청/응답 처리 (Vercel 함수와 dev_server 공용)
@@ -132,6 +133,15 @@ tools/             시연 샘플 생성, 정확도 측정
 - `{"action": "save", "group_id", "member_id"(수정 시), "name", "classes", "claim"(같은 이름 덮어쓰기, 화면에서는 쓰지 않음)}` → `member_id`
 
 오류 코드: `GROUP_NOT_FOUND`(404), `NAME_TAKEN`(409), `GROUP_FULL`(409, 20명), `not_configured`(503, 환경변수 없음)
+
+## 실제 서비스로 낼 때 할 일
+
+지금은 시연용이라 하지 않은 것들이다. 불특정 다수에게 열 때 한다.
+
+- **요청 횟수 제한**: 지금은 `/api/parse`, `/api/group` 에 호출 횟수 제한이 없다. Vercel 대시보드의 Firewall(WAF)에서 `/api/` 경로에 IP당 횟수 제한 규칙을 둔다(코드 수정 없음). 무료(Hobby) 플랜은 규칙 1개, 시간 창 최대 10분이라 한도가 빡빡하다. 더 세밀하게(그룹 만들기만 엄격하게 등) 하려면 Pro 플랜이나 서버 쪽 제한이 필요하다.
+- **봇 확인**: 그룹 만들기에 캡차(Cloudflare Turnstile 등)를 붙인다.
+- **사용량 감시**: Vercel·Supabase 사용량 알림과 지출 한도를 켠다.
+- **접근 제어**: 지금은 링크를 아는 사람이 모두 같은 권한이다(로그인 없음). 멤버별 수정 권한이나 그룹 삭제가 필요하면 로그인을 넣는다.
 
 ## 정해 둔 규칙
 
