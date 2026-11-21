@@ -428,7 +428,6 @@ function fitText(ctx, text, maxW) {
 
 // 칸 안 글: '3명' 뒤에 이름을 이어 쓰고, 칸이 모자라면 줄을 바꾸고, 그래도 넘치면 '외 N명'
 function drawSlotText(ctx, s, x, y, w, h, family) {
-  const gap = 10;
   const maxW = w - 20;
   const maxLines = Math.max(1, Math.floor((h - 8) / IMG.LINE));
   const style = {
@@ -436,41 +435,18 @@ function drawSlotText(ctx, s, x, y, w, h, family) {
     name: { font: `500 21px ${family}`, color: IMG.INK },
     more: { font: `500 20px ${family}`, color: IMG.MUTED },
   };
-  const token = (text, kind) => {
-    ctx.font = style[kind].font;
-    const t = fitText(ctx, text, maxW);
-    return { t, kind, w: ctx.measureText(t).width };
-  };
-  const lineWidth = (line) => line.reduce((sum, tk, i) => sum + tk.w + (i ? gap : 0), 0);
-
-  let lines = [[]];
-  for (const tk of [token(`${s.count}명`, 'count'), ...s.names.map((n) => token(n, 'name'))]) {
-    const cur = lines[lines.length - 1];
-    if (cur.length && lineWidth(cur) + gap + tk.w > maxW) lines.push([tk]);
-    else cur.push(tk);
-  }
-  if (lines.length > maxLines) {
-    lines = lines.slice(0, maxLines);
-    const last = lines[lines.length - 1];
-    const keepMin = lines.length === 1 ? 1 : 0; // 첫 줄의 '3명'은 남긴다
-    const shownNames = () => lines.flat().filter((tk) => tk.kind === 'name').length;
-    let more = token(`외 ${s.names.length - shownNames()}명`, 'more');
-    while (last.length > keepMin && lineWidth(last) + gap + more.w > maxW) {
-      last.pop();
-      more = token(`외 ${s.names.length - shownNames()}명`, 'more');
-    }
-    last.push(more);
-  }
+  // 화면과 같은 모양: 첫 줄에 인원 수, 아래로 이름을 한 줄에 하나씩. 모자라면 마지막 줄에 '외 K명'
+  const room = maxLines - 1;
+  const shown = s.names.length <= room ? s.names : s.names.slice(0, Math.max(room - 1, 0));
+  const rest = s.names.length - shown.length;
+  const lines = [{ t: `${s.count}명`, kind: 'count' }, ...shown.map((n) => ({ t: n, kind: 'name' }))];
+  if (rest && maxLines > 1) lines.push({ t: `외 ${rest}명`, kind: 'more' });
 
   ctx.textBaseline = 'alphabetic';
   lines.forEach((line, i) => {
-    let cx = x + 10;
-    for (const tk of line) {
-      ctx.font = style[tk.kind].font;
-      ctx.fillStyle = style[tk.kind].color;
-      ctx.fillText(tk.t, cx, y + 6 + IMG.LINE * i + 19);
-      cx += tk.w + gap;
-    }
+    ctx.font = style[line.kind].font;
+    ctx.fillStyle = style[line.kind].color;
+    ctx.fillText(fitText(ctx, line.t, maxW), x + 10, y + 6 + IMG.LINE * i + 19);
   });
 }
 
