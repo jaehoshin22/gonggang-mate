@@ -7,6 +7,7 @@ const GRID_START = 9 * 60; // 그리드 기본 범위 (블록이 벗어나면 �
 const GRID_END = 18 * 60;
 const MAX_UPLOAD = 4 * 1024 * 1024;
 const REFRESH_MS = 15000; // 그룹 화면 자동 새로고침 간격
+const SOLO_MAX = 20;      // 바로 비교 최대 인원 (서버 find_overlaps 한도와 같게)
 const PALETTE = ['#f28c8c', '#82b4f0', '#8ccda0', '#f5be6e', '#b496e1', '#6ec8c8', '#f0a0c8', '#c8be78'];
 const HOUR_PX = 64;      // 결과 그리드 1시간 높이 (style.css .tt.tall --hour 와 같게)
 const LINE_PX = 13.6;    // 칸 안 글자 한 줄 높이
@@ -14,6 +15,8 @@ const LINE_PX = 13.6;    // 칸 안 글자 한 줄 높이
 // ---- 상태 ----------------------------------------------------------------
 const state = {
   step: 'home',
+  mode: 'group',    // 'group' (링크로 모으기) | 'solo' (저장 없이 바로 비교)
+  solo: { members: [], result: null, error: null }, // members: [{name, classes}]
   group: null,      // {id, name, members: [{id, name, classes}]}
   result: null,     // /api/free 응답
   joinFile: null,
@@ -99,6 +102,7 @@ function go(step) {
   document.querySelectorAll('main > .step').forEach((s) => { s.hidden = s.id !== `step-${step}`; });
   if (step === 'review') renderReview();
   if (step === 'group') renderGroup();
+  if (step === 'solo') renderSolo();
   if (step === 'join') renderJoin();
   clearInterval(refreshTimer);
   if (step === 'group') {
@@ -194,6 +198,8 @@ async function createGroup() {
   try {
     const data = await postJSON('/api/group', { action: 'create', name: $('#group-name').value });
     history.replaceState(null, '', `/?g=${data.group_id}`);
+    state.mode = 'group';
+    $('#join-name').value = '';
     state.group = { id: data.group_id, name: '', members: [] };
     await loadGroup();
     go('group');
@@ -265,7 +271,7 @@ function renderGroup() {
   $('#my-action').replaceChildren(el('button', {
     class: `btn ${me ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
     text: me ? `${me} 시간표 다시 올리기` : '내 시간표 올리기',
-    onclick: () => { state.joinFile = null; go('join'); },
+    onclick: () => { state.mode = 'group'; state.joinFile = null; go('join'); },
   }));
 
   const panel = $('#group-result');
@@ -283,7 +289,7 @@ function renderGroup() {
         el('p', { text: '내 시간표를 먼저 올려 보세요' }),
       ]));
   } else {
-    renderResult(panel, state.result, me);
+    renderResult(panel, state.result, me, g.name || '공강 그룹');
   }
 }
 
@@ -328,7 +334,7 @@ function slotContent(s, me) {
 
 // ---- 결과: 주간 시간표 각 칸에 같이 비는 사람 (30분 미만은 서버에서 제외) ------------
 // 색은 '나'에게만: 내가 포함된 칸은 강조, 나머지는 약하게
-function renderResult(panel, r, me) {
+function renderResult(panel, r, me, title) {
   panel.replaceChildren();
   const segs = r.segments;
   if (!segs.length) {
@@ -350,6 +356,232 @@ function renderResult(panel, r, me) {
     el('span', {}, [el('i', { class: 'l-other' }), me ? '나는 안 되는 시간' : '같이 비는 시간']),
     el('span', { class: 'legend-hint', text: '누르면 자세히' }),
   ]));
+  panel.append(el('button', {
+    class: 'btn btn-ghost btn-arrow save-image', type: 'button', onclick: () => saveResultImage(r, title),
+  }, [icon('download', 16), '이미지로 저장']));
+}
+
+// ---- 결과를 이미지로 저장 ------------------------------------------------------
+// 화면 그리드와 따로, 공유용으로 canvas에 직접 그린다 (나 강조 없이 모두에게 같은 그림).
+const IMG = {
+  W: 1080, PAD: 44, TOP: 150, TIME_W: 56, HEAD_H: 46, HOUR: 132, FOOT: 76,
+  LINE: 26, ACCENT: '#5b48e0', SOFT: '#eeebff', EDGE: '#cfc8f8', INK: '#2a2447', MUTED: '#6b7079', LINEC: '#e3e5e8', FAINT: '#f0f1f3',
+};
+
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 너비를 넘으면 끝을 '…'로 줄인다
+function fitText(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
+// 칸 안 글: '3명' 뒤에 이름을 이어 쓰고, 칸이 모자라면 줄을 바꾸고, 그래도 넘치면 '외 N명'
+function drawSlotText(ctx, s, x, y, w, h, family) {
+  const gap = 10;
+  const maxW = w - 20;
+  const maxLines = Math.max(1, Math.floor((h - 8) / IMG.LINE));
+  const style = {
+    count: { font: `700 20px ${family}`, color: IMG.ACCENT },
+    name: { font: `500 21px ${family}`, color: IMG.INK },
+    more: { font: `500 20px ${family}`, color: IMG.MUTED },
+  };
+  const token = (text, kind) => {
+    ctx.font = style[kind].font;
+    const t = fitText(ctx, text, maxW);
+    return { t, kind, w: ctx.measureText(t).width };
+  };
+  const lineWidth = (line) => line.reduce((sum, tk, i) => sum + tk.w + (i ? gap : 0), 0);
+
+  let lines = [[]];
+  for (const tk of [token(`${s.count}명`, 'count'), ...s.names.map((n) => token(n, 'name'))]) {
+    const cur = lines[lines.length - 1];
+    if (cur.length && lineWidth(cur) + gap + tk.w > maxW) lines.push([tk]);
+    else cur.push(tk);
+  }
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    const last = lines[lines.length - 1];
+    const keepMin = lines.length === 1 ? 1 : 0; // 첫 줄의 '3명'은 남긴다
+    const shownNames = () => lines.flat().filter((tk) => tk.kind === 'name').length;
+    let more = token(`외 ${s.names.length - shownNames()}명`, 'more');
+    while (last.length > keepMin && lineWidth(last) + gap + more.w > maxW) {
+      last.pop();
+      more = token(`외 ${s.names.length - shownNames()}명`, 'more');
+    }
+    last.push(more);
+  }
+
+  ctx.textBaseline = 'alphabetic';
+  lines.forEach((line, i) => {
+    let cx = x + 10;
+    for (const tk of line) {
+      ctx.font = style[tk.kind].font;
+      ctx.fillStyle = style[tk.kind].color;
+      ctx.fillText(tk.t, cx, y + 6 + IMG.LINE * i + 19);
+      cx += tk.w + gap;
+    }
+  });
+}
+
+function buildResultImage(r, title) {
+  const segs = r.segments;
+  const days = segs.some((s) => s.day === 'SAT') ? DAYS : DAYS.slice(0, 5);
+  const from = Math.min(GRID_START, ...segs.map((s) => Math.floor(toMin(s.start) / 60) * 60));
+  const to = Math.max(GRID_END, ...segs.map((s) => Math.ceil(toMin(s.end) / 60) * 60));
+  const family = getComputedStyle(document.body).fontFamily;
+
+  const gridW = IMG.W - IMG.PAD * 2;
+  const colW = (gridW - IMG.TIME_W) / days.length;
+  const bodyH = ((to - from) / 60) * IMG.HOUR;
+  const gridH = IMG.HEAD_H + bodyH;
+  const H = IMG.TOP + gridH + IMG.FOOT;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = IMG.W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, IMG.W, H);
+
+  // 제목
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = IMG.INK;
+  ctx.font = `700 44px ${family}`;
+  ctx.fillText(fitText(ctx, title, gridW), IMG.PAD, IMG.PAD + 46);
+  ctx.fillStyle = IMG.MUTED;
+  ctx.font = `400 24px ${family}`;
+  ctx.fillText(`${r.member_count}명 · 수업 사이에 30분 이상 같이 비는 시간`, IMG.PAD, IMG.PAD + 92);
+
+  // 그리드 틀
+  const gx = IMG.PAD;
+  const gy = IMG.TOP;
+  const bodyY = gy + IMG.HEAD_H;
+  ctx.save();
+  rrect(ctx, gx, gy, gridW, gridH, 16);
+  ctx.clip();
+  ctx.fillStyle = '#f6f7f9';
+  ctx.fillRect(gx, gy, gridW, IMG.HEAD_H);
+  ctx.lineWidth = 2;
+  for (let m = from; m <= to; m += 30) {
+    const y = bodyY + ((m - from) / 60) * IMG.HOUR;
+    ctx.strokeStyle = m % 60 === 0 ? IMG.LINEC : IMG.FAINT;
+    ctx.beginPath();
+    ctx.moveTo(gx, y);
+    ctx.lineTo(gx + gridW, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = IMG.LINEC;
+  for (let i = 0; i < days.length; i++) {
+    const x = gx + IMG.TIME_W + colW * i;
+    ctx.beginPath();
+    ctx.moveTo(x, gy);
+    ctx.lineTo(x, gy + gridH);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(gx, bodyY);
+  ctx.lineTo(gx + gridW, bodyY);
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = IMG.LINEC;
+  ctx.lineWidth = 2;
+  rrect(ctx, gx, gy, gridW, gridH, 16);
+  ctx.stroke();
+
+  // 요일, 시각
+  ctx.fillStyle = IMG.MUTED;
+  ctx.font = `500 22px ${family}`;
+  ctx.textAlign = 'center';
+  days.forEach((d, i) => ctx.fillText(DAY_LABEL[d], gx + IMG.TIME_W + colW * (i + 0.5), gy + 31));
+  ctx.font = `400 18px ${family}`;
+  ctx.textAlign = 'right';
+  for (let m = from; m < to; m += 60) {
+    ctx.fillText(String(m / 60), gx + IMG.TIME_W - 8, bodyY + ((m - from) / 60) * IMG.HOUR + 20);
+  }
+  ctx.textAlign = 'left';
+
+  // 같이 비는 구간
+  for (const s of segs) {
+    const x = gx + IMG.TIME_W + colW * days.indexOf(s.day) + 4;
+    const y = bodyY + ((toMin(s.start) - from) / 60) * IMG.HOUR + 1;
+    const w = colW - 8;
+    const h = ((toMin(s.end) - toMin(s.start)) / 60) * IMG.HOUR - 2;
+    rrect(ctx, x, y, w, h, 8);
+    ctx.fillStyle = IMG.SOFT;
+    ctx.fill();
+    ctx.strokeStyle = IMG.EDGE;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.save();
+    rrect(ctx, x, y, w, h, 8);
+    ctx.clip();
+    drawSlotText(ctx, s, x, y, w, h, family);
+    ctx.restore();
+  }
+
+  // 아래쪽 서비스 이름
+  ctx.fillStyle = IMG.ACCENT;
+  ctx.font = `700 26px ${family}`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('공강메이트', IMG.PAD, H - 30);
+  return canvas;
+}
+
+// 휴대폰: 공유 시트(카톡, 앨범 저장), 카톡 앱 안 브라우저 등: 이미지를 띄워 길게 눌러 저장, PC: 파일 저장
+async function saveResultImage(r, title) {
+  const canvas = buildResultImage(r, title);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const file = new File([blob], 'gonggang-result.png', { type: 'image/png' });
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return; // 사용자가 닫음
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  if (touch || /KAKAOTALK|Instagram|FBAN|FBAV|NAVER\(inapp/i.test(navigator.userAgent)) {
+    openImageModal(url);
+    return;
+  }
+  const a = el('a', { href: url, download: 'gonggang-result.png' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function openImageModal(url) {
+  closeDetail();
+  const box = el('div', {
+    class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '결과 이미지',
+    onclick: (e) => { if (e.target === box) closeDetail(); },
+  }, [
+    el('div', { class: 'modal-card image-card' }, [
+      el('div', { class: 'modal-top' }, [
+        el('h3', { text: '결과 이미지' }),
+        el('button', { class: 'modal-close', type: 'button', 'aria-label': '닫기', onclick: closeDetail }, [icon('x', 18)]),
+      ]),
+      el('img', { src: url, alt: '공강 결과 이미지' }),
+      el('p', { text: '이미지를 길게 눌러 저장해 주세요.' }),
+    ]),
+  ]);
+  showModal(box);
 }
 
 // ---- 구간 상세 팝업 ----------------------------------------------------------
@@ -370,6 +602,10 @@ function openDetail(s, me) {
       el('ul', { class: 'modal-names' }, s.names.map((n) => el('li', { class: n === me ? 'me' : '', text: n === me ? `${n} (나)` : n }))),
     ]),
   ]);
+  showModal(box);
+}
+
+function showModal(box) {
   document.body.append(box);
   document.body.classList.add('no-scroll');
   requestAnimationFrame(() => box.classList.add('open'));
@@ -386,11 +622,88 @@ function closeDetail() {
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
 
-// ---- 내 시간표 올리기 ----------------------------------------------------------
+// =============================================================================
+// 바로 비교: 저장 없이 이 화면에서만 (새로고침하면 사라짐). 결과는 이미지로 저장
+// =============================================================================
+function startSolo() {
+  state.mode = 'solo';
+  go('solo');
+}
+
+async function computeSolo() {
+  const { members } = state.solo;
+  state.solo.error = null;
+  if (members.length < 2) {
+    state.solo.result = null;
+    return;
+  }
+  try {
+    state.solo.result = await postJSON('/api/free', { members });
+  } catch (err) {
+    state.solo.result = null;
+    state.solo.error = errText(err);
+  }
+}
+
+function renderSolo() {
+  const { members, result, error } = state.solo;
+  $('#solo-sub').textContent = members.length ? `${members.length}명 추가됨` : '저장 없이 이 화면에서만 비교해요';
+
+  $('#solo-action').replaceChildren(el('button', {
+    class: `btn ${members.length < 2 ? 'btn-primary' : 'btn-ghost'}`, type: 'button',
+    text: '시간표 추가', disabled: members.length >= SOLO_MAX,
+    onclick: () => { state.mode = 'solo'; state.joinFile = null; $('#join-name').value = ''; go('join'); },
+  }));
+
+  $('#solo-people').replaceChildren(...members.map((m, i) => el('li', {}, [
+    m.name,
+    el('span', { class: 'sub', text: `수업 ${m.classes.length}개` }),
+    el('button', {
+      type: 'button', 'aria-label': `${m.name} 빼기`, title: '빼기',
+      onclick: async () => { members.splice(i, 1); await computeSolo(); renderSolo(); },
+    }, [icon('x', 14)]),
+  ])));
+
+  const panel = $('#solo-result');
+  if (error) {
+    panel.replaceChildren(el('p', { class: 'error-text', text: error }));
+  } else if (members.length < 2 || !result) {
+    panel.replaceChildren(el('div', { class: 'empty-box' }, [
+      el('strong', { text: members.length ? '한 명만 더 올려 주세요' : '시간표 캡처를 올려 보세요' }),
+      el('p', { text: '2명 이상이면 같이 비는 시간이 보여요' }),
+    ]));
+  } else {
+    renderResult(panel, result, null, '같이 비는 공강');
+  }
+}
+
+async function addToSolo() {
+  const d = state.draft;
+  const problem = validateDraft();
+  if (problem) return showReviewError(problem);
+  const name = d.name.trim();
+  const { members } = state.solo;
+  if (members.some((m) => m.name === name)) return showReviewError(`이미 추가된 이름이에요: ${name}. 구분되는 이름으로 바꿔 주세요.`);
+  if (members.length >= SOLO_MAX) return showReviewError(`한 번에 ${SOLO_MAX}명까지 비교할 수 있어요.`);
+  const btn = $('#review-next');
+  btn.disabled = true;
+  btn.textContent = '비교 중...';
+  members.push({ name, classes: d.classes.map(({ day, start, end }) => ({ day, start, end })) });
+  state.joinFile = null;
+  $('#join-name').value = '';
+  await computeSolo();
+  btn.disabled = false;
+  go('solo');
+}
+
+// ---- 시간표 올리기 (그룹: 내 시간표, 바로 비교: 여러 명) ------------------------------
 function renderJoin() {
-  const me = myName();
-  $('#join-title').textContent = me ? '내 시간표 다시 올리기' : '내 시간표 올리기';
+  const solo = state.mode === 'solo';
+  const me = solo ? null : myName();
+  $('#join-title').textContent = solo ? '시간표 추가' : me ? '내 시간표 다시 올리기' : '내 시간표 올리기';
+  $('#join-name-label').textContent = solo ? '이름' : '내 이름';
   const nameInput = $('#join-name');
+  nameInput.placeholder = solo ? '이 시간표 주인의 이름' : '친구들이 알아볼 이름';
   if (!nameInput.value && me) nameInput.value = me;
   $('#join-error').hidden = true;
 
@@ -401,7 +714,7 @@ function renderJoin() {
     $('#join-file-label').textContent = '다른 캡처로 바꾸기';
   } else {
     preview.hidden = true;
-    $('#join-file-label').textContent = '내 시간표 캡처 선택';
+    $('#join-file-label').textContent = solo ? '시간표 캡처 선택' : '내 시간표 캡처 선택';
   }
   const btn = $('#join-next');
   btn.textContent = '인식하기';
@@ -532,11 +845,12 @@ function renderReview() {
   const panel = $('#review-panel');
   panel.replaceChildren();
   $('#review-error').hidden = true;
+  $('#review-next').textContent = state.mode === 'solo' ? '추가' : '그룹에 저장';
   if (!d) return;
 
   panel.append(el('h2', { class: 'page-title', text: '인식 결과 확인' }));
   panel.append(el('label', { class: 'field' }, [
-    el('span', { text: '내 이름' }),
+    el('span', { text: state.mode === 'solo' ? '이름' : '내 이름' }),
     el('input', { id: 'review-name', value: d.name, maxlength: 20, placeholder: '이름', oninput: (e) => { d.name = e.target.value; } }),
   ]));
 
@@ -601,9 +915,11 @@ $('#join-file').addEventListener('change', (e) => {
   renderJoin();
 });
 $('#join-next').addEventListener('click', joinParse);
-$('#join-cancel').addEventListener('click', () => go('group'));
+$('#join-cancel').addEventListener('click', () => go(state.mode === 'solo' ? 'solo' : 'group'));
 $('#review-back').addEventListener('click', () => go('join'));
-$('#review-next').addEventListener('click', () => saveToGroup());
+$('#review-next').addEventListener('click', () => (state.mode === 'solo' ? addToSolo() : saveToGroup()));
+$('#solo-start').addEventListener('click', startSolo);
+$('#solo-home').addEventListener('click', () => go('home'));
 
 // ---- 시작: 링크(?g=)로 들어왔으면 그룹 화면, 아니면 첫 화면 ---------------------------
 (async function start() {

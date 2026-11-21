@@ -25,7 +25,11 @@
           <img src="img/hero-people.webp" alt="" width="260" height="144">
         </div>
         <h2>우리, 언제 <em>만날까?</em></h2>
-        <p>링크를 카톡방에 공유하면<br>같이 비는 시간을 찾아 줘요.</p>
+        <ol class="steps">
+          <li><b>1</b><span>그룹을 만들고 링크를 카톡방에 공유해요</span></li>
+          <li><b>2</b><span>각자 링크에서 에브리타임 시간표 캡처를 올려요</span></li>
+          <li><b>3</b><span>모두가 같이 비는 시간을 자동으로 찾아 줘요</span></li>
+        </ol>
       </div>
 
       <label class="field">
@@ -36,6 +40,7 @@
         <svg width="18" height="18" aria-hidden="true"><use href="img/icons.svg#arrow-right"/></svg>
       </button>
       <p id="home-error" class="error-text" hidden></p>
+      <button id="solo-start" class="link-btn" type="button">시간표 캡처를 한꺼번에 올려 바로 비교하기</button>
       <p class="note note-info">
         <svg width="15" height="15" aria-hidden="true"><use href="img/icons.svg#info"/></svg>
         캡처는 인식에만 쓰고 저장하지 않아요.
@@ -49,11 +54,27 @@
       <div id="group-result"></div>
     </section>
 
-    <!-- 내 시간표 올리기 -->
+    <!-- 혼자 비교: 저장 없이 이 화면에서만 -->
+    <section id="step-solo" class="step" hidden>
+      <div class="group-head">
+        <div>
+          <h2>바로 비교</h2>
+          <p class="sub" id="solo-sub"></p>
+        </div>
+        <div class="head-actions">
+          <button id="solo-home" class="btn btn-ghost btn-small" type="button">처음으로</button>
+        </div>
+      </div>
+      <div id="solo-action"></div>
+      <ul id="solo-people" class="chips"></ul>
+      <div id="solo-result"></div>
+    </section>
+
+    <!-- 시간표 올리기 -->
     <section id="step-join" class="step" hidden>
       <h2 class="page-title" id="join-title">내 시간표 올리기</h2>
       <label class="field">
-        <span>내 이름</span>
+        <span id="join-name-label">내 이름</span>
         <input id="join-name" maxlength="20" placeholder="친구들이 알아볼 이름">
       </label>
       <label class="upload-box" for="join-file">
