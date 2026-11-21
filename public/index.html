@@ -40,7 +40,11 @@
         <svg width="18" height="18" aria-hidden="true"><use href="img/icons.svg#arrow-right"/></svg>
       </button>
       <p id="home-error" class="error-text" hidden></p>
-      <button id="solo-start" class="link-btn" type="button">시간표 캡처를 한꺼번에 올려 바로 비교하기</button>
+      <button id="solo-start" class="link-btn" type="button">혼자 비교하기</button>
+      <p class="note note-info solo-note">
+        <svg width="15" height="15" aria-hidden="true"><use href="img/icons.svg#info"/></svg>
+        링크 없이, 캡처만 올려도 같이 비는 시간을 찾아 줘요.
+      </p>
       <p class="note note-info">
         <svg width="15" height="15" aria-hidden="true"><use href="img/icons.svg#info"/></svg>
         캡처는 인식에만 쓰고 저장하지 않아요.
@@ -58,8 +62,8 @@
     <section id="step-solo" class="step" hidden>
       <div class="group-head">
         <div>
-          <h2>바로 비교</h2>
-          <p class="sub" id="solo-sub"></p>
+          <h2>혼자 비교하기</h2>
+          <p class="sub" id="solo-sub" hidden></p>
         </div>
         <div class="head-actions">
           <button id="solo-home" class="btn btn-ghost btn-small" type="button">처음으로</button>

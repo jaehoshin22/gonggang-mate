@@ -265,7 +265,7 @@ body.home .app-header { background: transparent; border-bottom-color: transparen
 
 .btn-icon { display: inline-flex; align-items: center; gap: 6px; }
 
-/* ---- 첫 화면 보조 링크, 바로 비교, 이미지 저장 ---- */
+/* ---- 첫 화면 보조 링크, 혼자 비교하기, 이미지 저장 ---- */
 .link-btn {
   display: block; margin: 14px auto 0; padding: 6px 4px;
   border: none; background: none; cursor: pointer;
@@ -291,3 +291,5 @@ body.home .app-header { background: transparent; border-bottom-color: transparen
 .image-card img { display: block; width: 100%; max-height: 62vh; object-fit: contain; margin: 12px 0 8px; border: 1px solid var(--line); border-radius: 10px; }
 .image-card p { margin: 0; color: var(--muted); font-size: 13px; }
 body.home main { padding-bottom: 32px; }
+#step-home .solo-note { margin-top: 2px; }
+.footnote { margin: 10px 0 0; text-align: center; color: #9a9ea6; font-size: 12px; }

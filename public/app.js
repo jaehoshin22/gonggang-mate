@@ -7,7 +7,7 @@ const GRID_START = 9 * 60; // 그리드 기본 범위 (블록이 벗어나면 �
 const GRID_END = 18 * 60;
 const MAX_UPLOAD = 4 * 1024 * 1024;
 const REFRESH_MS = 15000; // 그룹 화면 자동 새로고침 간격
-const SOLO_MAX = 20;      // 바로 비교 최대 인원 (서버 find_overlaps 한도와 같게)
+const SOLO_MAX = 20;      // 혼자 비교하기 최대 인원 (서버 find_overlaps 한도와 같게)
 const PALETTE = ['#f28c8c', '#82b4f0', '#8ccda0', '#f5be6e', '#b496e1', '#6ec8c8', '#f0a0c8', '#c8be78'];
 const HOUR_PX = 64;      // 결과 그리드 1시간 높이 (style.css .tt.tall --hour 와 같게)
 const LINE_PX = 13.6;    // 칸 안 글자 한 줄 높이
@@ -15,7 +15,7 @@ const LINE_PX = 13.6;    // 칸 안 글자 한 줄 높이
 // ---- 상태 ----------------------------------------------------------------
 const state = {
   step: 'home',
-  mode: 'group',    // 'group' (링크로 모으기) | 'solo' (저장 없이 바로 비교)
+  mode: 'group',    // 'group' (링크로 모으기) | 'solo' (저장 없이 혼자 비교하기)
   solo: { members: [], result: null, error: null }, // members: [{name, classes}]
   group: null,      // {id, name, members: [{id, name, classes}]}
   result: null,     // /api/free 응답
@@ -334,7 +334,7 @@ function slotContent(s, me) {
 
 // ---- 결과: 주간 시간표 각 칸에 같이 비는 사람 (30분 미만은 서버에서 제외) ------------
 // 색은 '나'에게만: 내가 포함된 칸은 강조, 나머지는 약하게
-function renderResult(panel, r, me, title) {
+function renderResult(panel, r, me, title, footnote) {
   panel.replaceChildren();
   const segs = r.segments;
   if (!segs.length) {
@@ -359,6 +359,7 @@ function renderResult(panel, r, me, title) {
   panel.append(el('button', {
     class: 'btn btn-ghost btn-arrow save-image', type: 'button', onclick: () => saveResultImage(r, title),
   }, [icon('download', 16), '이미지로 저장']));
+  if (footnote) panel.append(el('p', { class: 'footnote', text: footnote }));
 }
 
 // ---- 결과를 이미지로 저장 ------------------------------------------------------
@@ -623,7 +624,7 @@ function closeDetail() {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
 
 // =============================================================================
-// 바로 비교: 저장 없이 이 화면에서만 (새로고침하면 사라짐). 결과는 이미지로 저장
+// 혼자 비교하기: 저장 없이 이 화면에서만 (새로고침하면 사라짐). 결과는 이미지로 저장
 // =============================================================================
 function startSolo() {
   state.mode = 'solo';
@@ -647,7 +648,8 @@ async function computeSolo() {
 
 function renderSolo() {
   const { members, result, error } = state.solo;
-  $('#solo-sub').textContent = members.length ? `${members.length}명 추가됨` : '저장 없이 이 화면에서만 비교해요';
+  $('#solo-sub').textContent = `${members.length}명 추가됨`;
+  $('#solo-sub').hidden = !members.length;
 
   $('#solo-action').replaceChildren(el('button', {
     class: `btn ${members.length < 2 ? 'btn-primary' : 'btn-ghost'}`, type: 'button',
@@ -673,7 +675,7 @@ function renderSolo() {
       el('p', { text: '2명 이상이면 같이 비는 시간이 보여요' }),
     ]));
   } else {
-    renderResult(panel, result, null, '같이 비는 공강');
+    renderResult(panel, result, null, '같이 비는 공강', '화면을 나가면 결과가 사라져요. 필요하면 이미지로 저장해 두세요.');
   }
 }
 
@@ -696,7 +698,7 @@ async function addToSolo() {
   go('solo');
 }
 
-// ---- 시간표 올리기 (그룹: 내 시간표, 바로 비교: 여러 명) ------------------------------
+// ---- 시간표 올리기 (그룹: 내 시간표, 혼자 비교하기: 여러 명) ------------------------------
 function renderJoin() {
   const solo = state.mode === 'solo';
   const me = solo ? null : myName();
