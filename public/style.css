@@ -290,3 +290,4 @@ body.home main { padding-bottom: 32px; }
 .or { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: var(--muted); font-size: 13px; }
 .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .footnote { margin: 10px 0 0; text-align: center; color: #9a9ea6; font-size: 12px; }
+#step-join .note { margin: 10px 0 0; font-size: 12px; }
