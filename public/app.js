@@ -1115,7 +1115,7 @@ function renderReview() {
   ]));
 
   if (d.overlaps && d.overlaps.size) {
-    panel.append(el('p', { id: 'overlap-msg', class: 'field-error', role: 'alert', text: '시간이 겹치는 수업이 있어요. 빨간 줄의 시간을 고쳐 주세요.' }));
+    panel.append(el('p', { id: 'overlap-msg', class: 'field-error', role: 'alert', text: '시간이 겹치는 수업이 있어요.' }));
   }
   const list = el('ul', { class: 'class-list' });
   if (!d.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없어요. 수업 추가로 넣어 주세요.' }));
@@ -1134,7 +1134,7 @@ function validateDraft() {
   const overlaps = findOverlaps(state.draft.classes);
   if (overlaps.size) {
     state.draft.overlaps = overlaps; // 겹치는 줄을 빨갛게 표시하고, 고치기 전에는 다음으로 넘어가지 않는다
-    return { field: 'overlap', message: '시간이 겹치는 수업이 있어요. 빨간 줄의 시간을 고쳐 주세요.' };
+    return { field: 'overlap', message: '시간이 겹치는 수업이 있어요.' };
   }
   return null;
 }
