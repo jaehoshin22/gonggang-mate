@@ -54,6 +54,20 @@ const toMin = (t) => {
   return h * 60 + m;
 };
 const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+// 같은 요일에서 시간이 겹치는 수업들(이어 붙는 것은 겹침이 아님)
+function findOverlaps(classes) {
+  const ok = classes.filter(isValidClass);
+  const bad = new Set();
+  for (let i = 0; i < ok.length; i += 1) {
+    for (let j = i + 1; j < ok.length; j += 1) {
+      const a = ok[i];
+      const b = ok[j];
+      if (a.day === b.day && toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end)) { bad.add(a); bad.add(b); }
+    }
+  }
+  return bad;
+}
+const rowInvalid = (d, c) => !isValidClass(c) || Boolean(d.overlaps && d.overlaps.has(c));
 const isValidClass = (c) => DAYS.includes(c.day) && toMin(c.start) < toMin(c.end);
 // 90 -> '1시간 30분', 120 -> '2시간', 30 -> '30분'
 const fmtMinutes = (m) => [m >= 60 ? `${Math.floor(m / 60)}시간` : '', m % 60 ? `${m % 60}분` : ''].filter(Boolean).join(' ');
@@ -813,6 +827,12 @@ document.addEventListener('input', (e) => {
 });
 // 확인 화면의 문제: 이름 문제는 이름 칸에, 나머지는 오류 영역에 보여 준다
 function showProblem(problem) {
+  if (problem.field === 'overlap') {
+    renderReview();
+    const msg = $('#overlap-msg');
+    if (msg) msg.scrollIntoView({ block: 'center' });
+    return;
+  }
   if (problem.field !== 'name') return showReviewError(problem.message);
   $('#review-error').hidden = true;
   markFieldError($('#review-name'), problem.message);
@@ -936,7 +956,7 @@ async function joinParseFriends() {
     btn.textContent = cards.length > 1 ? `인식 중 ${i + 1}/${cards.length}` : '인식 중...';
     const d = { name: names[i], status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9, preview: cards[i].preview, cardId: cards[i].id };
     await parseDraft(d, cards[i].file);
-    if (d.status === 'done' && !d.warnings.length && d.classes.length) {
+    if (d.status === 'done' && !d.warnings.length && d.classes.length && !findOverlaps(d.classes).size) {
       members.push({ name: d.name, classes: d.classes.map(({ day, start, end }) => ({ day, start, end })) });
       removeCard(d.cardId);
     } else {
@@ -1012,10 +1032,10 @@ function shiftClasses(d, newStart) {
 }
 
 function classRow(d, c) {
-  const row = el('li', { class: `class-row ${isValidClass(c) ? '' : 'invalid'}` });
+  const row = el('li', { class: `class-row ${rowInvalid(d, c) ? 'invalid' : ''}` });
   const update = (key) => (e) => {
     c[key] = e.target.value;
-    row.classList.toggle('invalid', !isValidClass(c));
+    row.classList.toggle('invalid', rowInvalid(d, c));
     renderPreview(d);
   };
   row.append(
@@ -1094,6 +1114,9 @@ function renderReview() {
     }),
   ]));
 
+  if (d.overlaps && d.overlaps.size) {
+    panel.append(el('p', { id: 'overlap-msg', class: 'field-error', role: 'alert', text: '시간이 겹치는 수업이 있어요. 빨간 줄의 시간을 고쳐 주세요.' }));
+  }
   const list = el('ul', { class: 'class-list' });
   if (!d.classes.length) list.append(el('li', { class: 'empty', text: '수업이 없어요. 수업 추가로 넣어 주세요.' }));
   for (const c of d.classes) list.append(classRow(d, c));
@@ -1106,7 +1129,13 @@ function validateDraft() {
   const name = state.draft.name.trim();
   if (!name) return { field: 'name', message: '이름을 적어 주세요.' };
   if (name.length > 20) return { field: 'name', message: '이름은 20자까지 쓸 수 있어요.' };
+  state.draft.overlaps = null;
   if (state.draft.classes.some((c) => !isValidClass(c))) return { message: '끝나는 시각이 시작보다 빠른 수업이 있어요.' };
+  const overlaps = findOverlaps(state.draft.classes);
+  if (overlaps.size) {
+    state.draft.overlaps = overlaps; // 겹치는 줄을 빨갛게 표시하고, 고치기 전에는 다음으로 넘어가지 않는다
+    return { field: 'overlap', message: '시간이 겹치는 수업이 있어요. 빨간 줄의 시간을 고쳐 주세요.' };
+  }
   return null;
 }
 

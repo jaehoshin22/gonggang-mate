@@ -318,3 +318,4 @@ body.home main { padding-bottom: 32px; }
 
 .friend-card .field-error { order: 10; flex-basis: 100%; padding-left: 4px; }
 input.invalid:focus { outline-color: var(--danger); }
+#overlap-msg { margin: 0 0 8px; }

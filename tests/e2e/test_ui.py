@@ -399,3 +399,23 @@ def test_group_same_name_blocked_unless_mine(ui, base_url):
     ui.wait("group")
     names = ui.page.evaluate("state.group.members.map(m => m.name)")
     assert sorted(names) == ["민지", "민지B"]
+
+
+def test_overlapping_classes_block_next_step(ui):
+    """같은 요일에 시간이 겹치는 수업이 있으면 다음 화면으로 넘어가지 못하고, 겹치는 줄이 빨갛게 표시된다."""
+    ui.solo_start()
+    ui.add_me(finish=False)
+    p = ui.page
+    before = p.locator(".class-row").count()
+    p.click("text=수업 추가")  # 기본값 월요일 09:00-10:15 두 개 -> 서로 겹침
+    p.click("text=수업 추가")
+    p.click("#review-next")
+    p.wait_for_selector("#overlap-msg")
+    assert ui.visible("review") and not ui.visible("solo")
+    assert "겹치는 수업" in p.inner_text("#overlap-msg")
+    assert p.locator(".class-row.invalid").count() >= 2
+    for _ in range(2):  # 겹치는 두 줄을 지우면 넘어간다
+        p.locator(".class-row").last.locator("text=삭제").click()
+    assert p.locator(".class-row").count() == before
+    p.click("#review-next")
+    ui.wait("solo")
