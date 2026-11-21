@@ -153,14 +153,17 @@ def test_solo_me_first_then_friend_cards(ui):
     assert ui.page.locator(".friend-card").count() == 3
 
     ui.page.click("#join-next")  # 이름 없이는 넘어가지 않는다
-    assert "모두 적어" in ui.page.inner_text("#join-error")
+    assert ui.page.locator(".friend-card input.invalid").count() == 1  # 빈 칸 하나만 빨갛게
+    assert "이름을 적어" in ui.page.inner_text(".friend-card .field-error")
     ui.fill_cards(["민지", "민지", "유나"])
     ui.page.click("#join-next")
-    assert "이미 있는 이름" in ui.page.inner_text("#join-error")
+    assert "이미 있는 이름" in ui.page.inner_text(".friend-card .field-error")
+    ui.page.locator(".friend-card input").nth(1).fill("민지A")  # 다시 입력하면 표시가 사라진다
+    assert ui.page.locator(".friend-card .field-error").count() == 0
     ui.fill_cards(["민지", "서준", "유나"])
     ui.fill_cards(["재호"])  # 내 이름과 겹침
     ui.page.click("#join-next")
-    assert "이미 있는 이름" in ui.page.inner_text("#join-error")
+    assert "이미 있는 이름" in ui.page.inner_text(".friend-card .field-error")
     ui.fill_cards(["민지"])
 
     ui.page.click(".friend-card >> nth=2 >> button[aria-label='이 캡처 빼기']")
@@ -365,3 +368,34 @@ def test_image_popup_closes_with_back_on_touch(browser, base_url):
     page.wait_for_timeout(300)
     assert page.locator(".modal").count() == 0 and page.is_visible("#step-group")
     ctx.close()
+
+
+def test_group_same_name_blocked_unless_mine(ui, base_url):
+    """동명이인은 덮어쓸 수 없고 이름을 바꿔야 한다. 이 기기에서 올린 본인 것만 다시 올릴 수 있다."""
+    gid = post_group(base_url, {"action": "create", "name": "동명이인"})["group_id"]
+    classes = json.load(open(os.path.join(DEMO, "jaeho.json")))["classes"]
+    post_group(base_url, {"action": "save", "group_id": gid, "name": "민지", "classes": [{**c, "color": "#f28c8c"} for c in classes]})
+
+    def upload(name):
+        ui.page.click("#my-action button")
+        ui.wait("join")
+        ui.page.fill("#join-name", name)
+        ui.page.set_input_files("#join-file", CAPTURES["minji"])
+        ui.page.click("#join-next")
+        ui.page.wait_for_selector("#step-review:not([hidden]) .class-row")
+        ui.page.click("#review-next")
+
+    ui.open(f"/?g={gid}")
+    ui.wait("group")
+    upload(" 민지 ")  # 앞뒤 공백이 있어도 같은 이름으로 본다
+    ui.page.wait_for_selector("#review-name.invalid")  # 이름 칸이 빨갛게 되고 바로 아래에 안내
+    assert "이미 있는 이름" in ui.page.inner_text(".field-error")
+    assert ui.page.locator("#review-error button").count() == 0  # 덮어쓰기 선택지가 없다
+    ui.page.fill("#review-name", "민지B")
+    ui.page.click("#review-next")
+    ui.wait("group")
+
+    upload("민지B")  # 이 기기에서 올린 본인 시간표는 다시 올릴 수 있다
+    ui.wait("group")
+    names = ui.page.evaluate("state.group.members.map(m => m.name)")
+    assert sorted(names) == ["민지", "민지B"]

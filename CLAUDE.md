@@ -30,5 +30,5 @@ python -m pytest tests/e2e --e2e -q   # 화면 흐름 Playwright 테스트(기�
 - 캡처 기본 범위는 9~17시(에브리타임 기본값). 17시 전에 끝나는 격자만 `grid_ends_early` 경고.
 - 공강 = 각자 첫 수업 시작부터 마지막 수업 끝 사이의 빈 시간. 수업이 0~1개인 요일은 공강 없음.
 - 계산은 5분 단위, 화면 눈금은 30분. 같은 사람 조합일 때만 한 칸으로 묶는다.
-- 나 식별은 localStorage `gongang:group:<gid>`.
+- 나 식별은 localStorage `gongang:group:<gid>`. 그룹에서 같은 이름은 이 기기에서 올린 본인 것만 다시 올릴 수 있고, 그 밖에는 이름을 바꾸게 한다(덮어쓰기 선택지 없음).
 - 화면 이동은 History API: 화면마다 기록 한 칸(`go`), 뒤로가기는 `popstate`. 첫 화면 `/`, 그룹 `/?g=`, 혼자 비교하기 `/?view=solo`, 올리기·확인·팝업은 주소 변화 없이 기록만. 올리기를 끝내면 `finishFlow`로 두 칸을 걷어낸다.

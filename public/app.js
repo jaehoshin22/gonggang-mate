@@ -733,12 +733,12 @@ function renderSolo() {
 async function addToSolo() {
   const d = state.draft;
   const problem = validateDraft();
-  if (problem) return showReviewError(problem);
+  if (problem) return showProblem(problem);
   const name = d.name.trim();
   const { members, adding } = state.solo;
   const mine = adding === 'me';
   const others = members.filter((m) => !(mine && m.me)); // 내 시간표를 다시 올릴 때는 옛 내 시간표를 뺀 나머지와 비교
-  if (others.some((m) => m.name === name)) return showReviewError(dupNameMessage(name));
+  if (others.some((m) => m.name === name)) return showProblem({ field: 'name', message: dupNameMessage(name) });
   if (!mine && members.length >= SOLO_MAX) return showReviewError(`한 번에 ${SOLO_MAX}명까지 비교할 수 있어요.`);
   const btn = $('#review-next');
   btn.disabled = true;
@@ -792,7 +792,31 @@ function removeCard(id) {
   state.friendCards = state.friendCards.filter((c) => c !== card);
 }
 
-const dupNameMessage = (name) => `이미 있는 이름이에요: ${name}. 구분되는 이름으로 바꿔 주세요.`;
+const dupNameMessage = (name) => `이미 있는 이름이에요. 다른 이름으로 바꿔 주세요. (예: ${name}B)`;
+
+// 이름 칸 오류: 테두리를 빨갛게 하고 칸 바로 아래에 한 줄로 알린다. 다시 입력하면 사라진다
+function markFieldError(input, message) {
+  clearFieldError(input);
+  input.classList.add('invalid');
+  input.setAttribute('aria-invalid', 'true');
+  input.insertAdjacentElement('afterend', el('p', { class: 'field-error', role: 'alert', text: message }));
+  input.focus();
+}
+function clearFieldError(input) {
+  input.classList.remove('invalid');
+  input.removeAttribute('aria-invalid');
+  const next = input.nextElementSibling;
+  if (next && next.classList.contains('field-error')) next.remove();
+}
+document.addEventListener('input', (e) => {
+  if (e.target.classList && e.target.classList.contains('invalid')) clearFieldError(e.target);
+});
+// 확인 화면의 문제: 이름 문제는 이름 칸에, 나머지는 오류 영역에 보여 준다
+function showProblem(problem) {
+  if (problem.field !== 'name') return showReviewError(problem.message);
+  $('#review-error').hidden = true;
+  markFieldError($('#review-name'), problem.message);
+}
 
 function addCards(files) {
   const room = SOLO_MAX - state.solo.members.length - state.friendCards.length;
@@ -878,10 +902,8 @@ async function joinParse() {
   if (state.mode === 'solo' && state.solo.adding === 'friend') return joinParseFriends();
   const name = $('#join-name').value.trim();
   if (!name) {
-    const box = $('#join-error');
-    box.textContent = '이름을 먼저 적어 주세요.';
-    box.hidden = false;
-    $('#join-name').focus();
+    $('#join-error').hidden = true;
+    markFieldError($('#join-name'), '이름을 먼저 적어 주세요.');
     return;
   }
   const btn = $('#join-next');
@@ -898,10 +920,11 @@ async function joinParseFriends() {
   const cards = state.friendCards;
   const box = $('#join-error');
   const inputs = [...document.querySelectorAll('#join-cards input')];
-  const fail = (message, input) => { box.textContent = message; box.hidden = false; if (input) input.focus(); };
+  box.hidden = true;
+  const fail = (message, input) => markFieldError(input, message);
   const names = cards.map((c) => c.name.trim());
   const empty = names.findIndex((n) => !n);
-  if (empty >= 0) return fail('친구 이름을 모두 적어 주세요.', inputs[empty]);
+  if (empty >= 0) return fail('이름을 적어 주세요.', inputs[empty]);
   const dup = names.findIndex((n, i) => names.indexOf(n) !== i || state.solo.members.some((m) => m.name === n));
   if (dup >= 0) return fail(dupNameMessage(names[dup]), inputs[dup]);
 
@@ -932,10 +955,10 @@ async function joinParseFriends() {
   go('review');
 }
 
-async function saveToGroup(claim = false) {
+async function saveToGroup() {
   const d = state.draft;
   const problem = validateDraft();
-  if (problem) return showReviewError(problem);
+  if (problem) return showProblem(problem);
   const gid = state.group.id;
   const mine = getMine(gid);
   const btn = $('#review-next');
@@ -948,44 +971,20 @@ async function saveToGroup(claim = false) {
       member_id: mine ? mine.memberId : null,
       name: d.name.trim(),
       classes: d.classes.map(({ day, start, end, color }) => ({ day, start, end, color })),
-      claim,
     });
     setMine(gid, { memberId: data.member_id, name: d.name.trim() });
     $('#join-name').value = '';
     await loadGroup();
     finishFlow('group');
   } catch (err) {
-    if (err.code === 'NAME_TAKEN' && !mine) showNameConflict(d.name.trim());
-    else showReviewError(err.code === 'NAME_TAKEN' ? `같은 이름을 다른 사람이 쓰고 있어요: ${d.name.trim()}` : errText(err));
+    // 같은 이름은 이 기기에서 올린 본인 것만 다시 올릴 수 있다(member_id). 그 밖에는 이름을 바꾸게 한다
+    if (err.code === 'NAME_TAKEN') {
+      showProblem({ field: 'name', message: dupNameMessage(d.name.trim()) });
+    } else showReviewError(errText(err));
   } finally {
     btn.disabled = false;
     btn.textContent = '그룹에 저장';
   }
-}
-
-// 같은 이름이 이미 있을 때: 본인(다른 기기에서 올렸던 나)인지, 다른 사람인지 묻는다
-function showNameConflict(name) {
-  const box = $('#review-error');
-  box.replaceChildren(
-    el('p', { text: `이 그룹에 같은 이름이 이미 있어요: ${name}` }),
-    el('div', { class: 'conflict-actions' }, [
-      el('button', {
-        class: 'btn btn-primary btn-small', type: 'button', text: `내가 그 ${name} 맞아요 · 내 시간표로 바꾸기`,
-        onclick: () => saveToGroup(true),
-      }),
-      el('button', {
-        class: 'btn btn-ghost btn-small', type: 'button', text: '다른 사람이에요 · 이름 바꾸기',
-        onclick: () => {
-          const input = $('#review-name');
-          input.focus();
-          input.select();
-          box.replaceChildren(el('p', { text: '예: 재호B, 신재호처럼 구분되는 이름으로 바꾼 뒤 다시 저장해 주세요.' }));
-        },
-      }),
-    ]),
-  );
-  box.hidden = false;
-  box.scrollIntoView({ block: 'center' });
 }
 
 // =============================================================================
@@ -1105,9 +1104,9 @@ function renderReview() {
 
 function validateDraft() {
   const name = state.draft.name.trim();
-  if (!name) return '이름을 적어 주세요.';
-  if (name.length > 20) return '이름은 20자까지 쓸 수 있어요.';
-  if (state.draft.classes.some((c) => !isValidClass(c))) return '끝나는 시각이 시작보다 빠른 수업이 있어요.';
+  if (!name) return { field: 'name', message: '이름을 적어 주세요.' };
+  if (name.length > 20) return { field: 'name', message: '이름은 20자까지 쓸 수 있어요.' };
+  if (state.draft.classes.some((c) => !isValidClass(c))) return { message: '끝나는 시각이 시작보다 빠른 수업이 있어요.' };
   return null;
 }
 

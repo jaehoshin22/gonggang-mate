@@ -129,7 +129,7 @@ tools/             시연 샘플 생성, 정확도 측정
 
 `POST /api/group`
 - `{"action": "create", "name": "소융 밥약"}` → `group_id`
-- `{"action": "save", "group_id", "member_id"(수정 시), "name", "classes", "claim"(같은 이름 덮어쓰기)}` → `member_id`
+- `{"action": "save", "group_id", "member_id"(수정 시), "name", "classes", "claim"(같은 이름 덮어쓰기, 화면에서는 쓰지 않음)}` → `member_id`
 
 오류 코드: `GROUP_NOT_FOUND`(404), `NAME_TAKEN`(409), `GROUP_FULL`(409, 20명), `not_configured`(503, 환경변수 없음)
 
