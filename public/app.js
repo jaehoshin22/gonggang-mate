@@ -968,7 +968,6 @@ $('#join-cancel').addEventListener('click', () => history.back());
 $('#review-back').addEventListener('click', () => history.back());
 $('#review-next').addEventListener('click', () => (state.mode === 'solo' ? addToSolo() : saveToGroup()));
 $('#solo-start').addEventListener('click', startSolo);
-$('#solo-home').addEventListener('click', () => go('home'));
 
 // ---- 뒤로가기·앞으로가기: 기록에 남긴 화면으로 되돌린다 ----------------------------
 window.addEventListener('popstate', (e) => {
