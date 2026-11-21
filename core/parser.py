@@ -50,7 +50,7 @@ MIN_BLOCK_HOURS = 0.15       # 이보다 짧은 색 구간은 무시 (약 9분)
 BLOCK_TOP_INSET_HOURS = 0.03 # 블록 윗변이 시각 선보다 아래로 들어간 정도 (실측 2~3px / 1시간 74px)
 HUE_SPLIT = 14               # 색상 차이가 이 이상이면 다른 수업
 DARK_MEAN_VAL = 90           # 평균 밝기가 이보다 낮으면 다크모드
-END_HOUR_EXPECTED = 18       # 공강 계산 범위 끝. 격자가 이보다 일찍 끝나면 경고
+END_HOUR_EXPECTED = 17       # 에브리타임은 수업이 없어도 17시까지는 보여 준다(기본 범위). 격자가 이보다 일찍 끝나면 잘린 캡처로 보고 경고
 
 
 class ParseError(Exception):

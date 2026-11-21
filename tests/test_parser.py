@@ -73,6 +73,14 @@ def test_evening_grid_extends_past_18():
     assert result["meta"]["grid_end"] == "22:00"
 
 
+def test_default_range_grid_ending_at_17_has_no_warning():
+    # 에브리타임은 수업이 없으면 17시까지만 보여 준다. 이건 잘린 캡처가 아니다
+    classes = [(1, "09:00", "10:15"), (3, "13:00", "14:15")]
+    result = parse_timetable(make_timetable(classes, end_hour=17))
+    assert result["meta"]["grid_end"] == "17:00"
+    assert "grid_ends_early" not in {w["code"] for w in result["warnings"]}
+
+
 def test_cropped_bottom_warns_without_crashing():
     result = parse_timetable(make_timetable(SAMPLE, overlay_from_hour=15))
     codes = {w["code"] for w in result["warnings"]}
