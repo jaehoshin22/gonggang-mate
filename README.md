@@ -3,7 +3,7 @@
 에브리타임 시간표 캡처로 친구들과 함께 비는 공강 시간을 찾아주는 모바일 웹앱.
 
 - **그룹 링크 (F7):** 그룹을 만들어 카톡방에 링크를 올리면, 각자 자기 시간표 캡처를 올리는 대로 공통 공강이 자동으로 보인다.
-- **혼자 비교하기:** 링크 없이 캡처를 여러 장 차례로 올려 바로 비교한다. 서버에 저장하지 않고, 화면을 나가면 사라진다.
+- **혼자 비교하기:** 링크 없이 내 시간표와 친구 캡처 여러 장을 올려 바로 비교한다. 서버에 저장하지 않고, 화면을 나가면 사라진다.
 - **결과 이미지 저장:** 그룹과 혼자 비교하기의 결과를 이미지(PNG)로 저장하거나 공유한다.
 
 ## 실행
@@ -22,6 +22,8 @@ python dev_server.py           # http://localhost:8000
 
 ```bash
 python -m pytest               # 단위 테스트 (공강 계산, 이미지 인식, API, 그룹)
+pip install playwright && python -m playwright install chromium
+python -m pytest tests/e2e --e2e   # 화면 흐름 테스트 (E2E_CHROME 으로 크롬 경로 지정 가능)
 # 그룹 SQL까지 실제 PostgreSQL로 검증하려면 (psycopg 필요)
 PG_TEST_DSN="host=localhost user=postgres dbname=postgres" python -m pytest tests/test_group.py
 python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정 (비기능 요구사항)
@@ -94,6 +96,7 @@ core/free.py       공강 계산 (5분 칸 288개, 같은 사람 조합이 이�
 core/web.py        요청/응답 처리 (Vercel 함수와 dev_server 공용)
 dev/screens.html   화면 모아보기 (개발용, dev_server 에서만 열림)
 tests/             pytest (tests/synth.py 가 합성 캡처 생성)
+  e2e/             화면 흐름 Playwright 테스트 (--e2e 로만 실행)
 tools/             시연 샘플 생성, 정확도 측정
 ```
 

@@ -738,7 +738,7 @@ async function addToSolo() {
   const { members, adding } = state.solo;
   const mine = adding === 'me';
   const others = members.filter((m) => !(mine && m.me)); // 내 시간표를 다시 올릴 때는 옛 내 시간표를 뺀 나머지와 비교
-  if (others.some((m) => m.name === name)) return showReviewError(`이미 추가된 이름이에요: ${name}. 구분되는 이름으로 바꿔 주세요.`);
+  if (others.some((m) => m.name === name)) return showReviewError(dupNameMessage(name));
   if (!mine && members.length >= SOLO_MAX) return showReviewError(`한 번에 ${SOLO_MAX}명까지 비교할 수 있어요.`);
   const btn = $('#review-next');
   btn.disabled = true;
@@ -755,6 +755,7 @@ async function addToSolo() {
   $('#join-name').value = '';
   await computeSolo();
   btn.disabled = false;
+  if (!mine && d.cardId) removeCard(d.cardId);
   if (!mine && nextInQueue()) return;
   finishFlow('solo');
 }
@@ -771,6 +772,7 @@ function nextInQueue() {
 }
 
 function skipDraft() {
+  if (state.draft && state.draft.cardId) removeCard(state.draft.cardId);
   if (!nextInQueue()) finishFlow('solo');
 }
 
@@ -781,6 +783,16 @@ function clearCards() {
   state.friendCards.forEach((c) => URL.revokeObjectURL(c.preview));
   state.friendCards = [];
 }
+
+// 추가가 끝난(또는 건너뛴) 장은 카드 목록에서 뺀다: 확인 화면에서 이전으로 돌아와도 남은 장만 보이게
+function removeCard(id) {
+  const card = state.friendCards.find((c) => c.id === id);
+  if (!card) return;
+  URL.revokeObjectURL(card.preview);
+  state.friendCards = state.friendCards.filter((c) => c !== card);
+}
+
+const dupNameMessage = (name) => `이미 있는 이름이에요: ${name}. 구분되는 이름으로 바꿔 주세요.`;
 
 function addCards(files) {
   const room = SOLO_MAX - state.solo.members.length - state.friendCards.length;
@@ -891,7 +903,7 @@ async function joinParseFriends() {
   const empty = names.findIndex((n) => !n);
   if (empty >= 0) return fail('친구 이름을 모두 적어 주세요.', inputs[empty]);
   const dup = names.findIndex((n, i) => names.indexOf(n) !== i || state.solo.members.some((m) => m.name === n));
-  if (dup >= 0) return fail(`이미 있는 이름이에요: ${names[dup]}. 구분되는 이름으로 바꿔 주세요.`, inputs[dup]);
+  if (dup >= 0) return fail(dupNameMessage(names[dup]), inputs[dup]);
 
   const btn = $('#join-next');
   btn.disabled = true;
@@ -899,10 +911,11 @@ async function joinParseFriends() {
   const needReview = [];
   for (let i = 0; i < cards.length; i += 1) {
     btn.textContent = cards.length > 1 ? `인식 중 ${i + 1}/${cards.length}` : '인식 중...';
-    const d = { name: names[i], status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9, preview: cards[i].preview };
+    const d = { name: names[i], status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9, preview: cards[i].preview, cardId: cards[i].id };
     await parseDraft(d, cards[i].file);
     if (d.status === 'done' && !d.warnings.length && d.classes.length) {
       members.push({ name: d.name, classes: d.classes.map(({ day, start, end }) => ({ day, start, end })) });
+      removeCard(d.cardId);
     } else {
       needReview.push(d);
     }
@@ -1029,7 +1042,8 @@ function renderReview() {
   const friend = state.mode === 'solo' && state.solo.adding === 'friend';
   const q = friend ? state.queue : null;
   const more = !!q && state.queueIndex < q.length - 1;
-  $('#review-next').textContent = state.mode !== 'solo' ? '그룹에 저장' : friend ? (more ? '다음' : '추가') : '저장';
+  $('#review-next').textContent = state.mode !== 'solo' ? '그룹에 저장' : friend && more ? '다음' : '추가';
+  $('#review-back').textContent = friend ? '취소' : '이전';
   if (!d) return;
 
   const title = q && q.length > 1 ? `인식 결과 확인 (${state.queueIndex + 1}/${q.length})` : '인식 결과 확인';
