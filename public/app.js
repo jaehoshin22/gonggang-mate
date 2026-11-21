@@ -730,7 +730,7 @@ function renderSolo() {
 
   $('#solo-people').replaceChildren(...members.map((m, i) => el('li', {}, [
     m.name,
-    el('span', { class: 'sub', text: m.me ? `나 · 수업 ${m.classes.length}개` : `수업 ${m.classes.length}개` }),
+    m.me ? el('span', { class: 'sub', text: '나' }) : null,
     // 내 시간표는 빼지 않고 '다시 올리기'로 바꾼다
     m.me ? null : el('button', {
       type: 'button', 'aria-label': `${m.name} 빼기`, title: '빼기',
