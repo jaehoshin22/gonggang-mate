@@ -67,16 +67,21 @@ const SCENES = [
     state.solo = { members: [{ name: '재호', classes: d['재호'], me: true }, { name: '민지', classes: d['민지'] }, { name: '서준', classes: d['서준'] }], result: null, error: null, adding: null };
     await computeSolo(); show('solo');
   } },
-  { title: '혼자 비교하기 (친구 시간표 올리기)', run: () => {
-    state.mode = 'solo'; state.solo = { members: [{ name: '재호', classes: [], me: true }], result: null, error: null, adding: 'friend' }; state.joinFile = null; show('join');
+  { title: '혼자 비교하기 (친구 캡처 고른 뒤)', run: () => {
+    // 가짜 썸네일: 파일 없이 그림만 넣는다
+    const thumb = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="104" height="144"><rect width="104" height="144" fill="#eef"/><rect x="10" y="20" width="40" height="30" fill="#f28c8c"/><rect x="54" y="60" width="40" height="40" fill="#82b4f0"/></svg>');
+    state.mode = 'solo'; state.solo = { members: [{ name: '재호', classes: [], me: true }], result: null, error: null, adding: 'friend' };
+    state.friendCards = [{ id: 1, file: null, preview: thumb, name: '민지' }, { id: 2, file: null, preview: thumb, name: '' }, { id: 3, file: null, preview: thumb, name: '' }];
+    show('join');
   } },
-
-  { title: '혼자 비교하기 (친구 3장 확인 중)', run: (d) => {
+  { title: '혼자 비교하기 (확인이 필요한 친구 시간표)', run: (d) => {
+    const thumb = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="104" height="144"><rect width="104" height="144" fill="#eef"/><rect x="10" y="20" width="40" height="30" fill="#f28c8c"/></svg>');
     state.mode = 'solo';
     state.solo = { members: [{ name: '재호', classes: d['재호'], me: true }], result: null, error: null, adding: 'friend' };
-    const mk = (n, i) => ({ name: '', status: 'done', error: null, warnings: [], gridStart: 9,
+    const mk = (n, i) => ({ name: n, status: 'done', error: null, gridStart: 9, preview: thumb,
+      warnings: [{ code: 'cut_off', message: '시간표가 17시까지만 보여요. 그 뒤 수업은 직접 추가해 주세요.' }],
       classes: d[n].map((c, k) => ({ ...c, id: 9200 + i * 100 + k, color: PALETTE[k % PALETTE.length] })) });
-    state.queue = ['민지', '서준', '유나'].map(mk); state.queueIndex = 0; state.draft = state.queue[0];
+    state.queue = ['민지', '서준'].map(mk); state.queueIndex = 0; state.draft = state.queue[0];
     show('review');
   } },
 

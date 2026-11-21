@@ -20,7 +20,7 @@ const state = {
   group: null,      // {id, name, members: [{id, name, classes}]}
   result: null,     // /api/free 응답
   joinFile: null,
-  joinFiles: [],    // 혼자 비교하기에서 친구 시간표를 여러 장 고를 때
+  friendCards: [],  // 혼자 비교하기에서 고른 친구 캡처 카드 [{id, file, preview, name}]
   queue: null,      // 여러 장을 인식한 뒤 한 장씩 확인하는 초안 목록
   queueIndex: 0,
   draft: null,      // 확인 화면에서 고치는 내 시간표 {name, status, error, warnings, classes, gridStart}
@@ -128,7 +128,7 @@ function go(step) {
 function finishFlow(parent) {
   state.draft = null;
   state.joinFile = null;
-  state.joinFiles = [];
+  clearCards();
   state.queue = null;
   if (history.state && history.state.step === 'review') history.go(-2);
   else go(parent);
@@ -310,7 +310,7 @@ function renderGroup() {
   $('#my-action').replaceChildren(el('button', {
     class: `btn ${me ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
     text: me ? `${me} 시간표 다시 올리기` : '내 시간표 올리기',
-    onclick: () => { state.mode = 'group'; state.joinFile = null; state.joinFiles = []; go('join'); },
+    onclick: () => { state.mode = 'group'; state.joinFile = null; go('join'); },
   }));
 
   const panel = $('#group-result');
@@ -704,7 +704,7 @@ function openSoloUpload(who) {
   state.mode = 'solo';
   state.solo.adding = who;
   state.joinFile = null;
-  state.joinFiles = [];
+  clearCards();
   $('#join-name').value = '';
   go('join');
 }
@@ -799,35 +799,91 @@ function skipDraft() {
 }
 
 // ---- 시간표 올리기 (그룹: 내 시간표, 혼자 비교하기: 여러 명) ------------------------------
+// ---- 친구 시간표: 캡처를 여러 장 고르면 카드(썸네일 + 이름)가 생긴다 ----------------------
+let cardSeq = 1;
+function clearCards() {
+  state.friendCards.forEach((c) => URL.revokeObjectURL(c.preview));
+  state.friendCards = [];
+}
+
+function addCards(files) {
+  const room = SOLO_MAX - state.solo.members.length - state.friendCards.length;
+  const take = files.slice(0, Math.max(room, 0));
+  take.forEach((file) => state.friendCards.push({ id: cardSeq++, file, preview: URL.createObjectURL(file), name: '' }));
+  return take.length < files.length ? `한 번에 ${SOLO_MAX}명까지 비교할 수 있어요.` : null;
+}
+
+// 캡처 크게 보기: 뒤 화면은 어둡게, 바깥·X·뒤로가기·Esc로 닫힘
+function openCapture(src, alt) {
+  removeModal();
+  const box = el('div', {
+    class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': alt,
+    onclick: (e) => { if (e.target === box) closeDetail(); },
+  }, [
+    el('div', { class: 'modal-card image-card capture-card' }, [
+      el('div', { class: 'modal-top' }, [
+        el('h3', { text: alt }),
+        el('button', { class: 'modal-close', type: 'button', 'aria-label': '닫기', onclick: closeDetail }, [icon('x', 18)]),
+      ]),
+      el('img', { src, alt }),
+    ]),
+  ]);
+  showModal(box);
+}
+
+function renderCards() {
+  const list = $('#join-cards');
+  const cards = state.friendCards;
+  list.hidden = !cards.length;
+  list.replaceChildren(...cards.map((card) => el('li', { class: 'friend-card' }, [
+    el('button', { class: 'thumb-btn', type: 'button', 'aria-label': '캡처 크게 보기', onclick: () => openCapture(card.preview, '친구 시간표 캡처') }, [
+      el('img', { src: card.preview, alt: '' }),
+    ]),
+    el('input', {
+      value: card.name, maxlength: 20, placeholder: '친구 이름', 'aria-label': '친구 이름',
+      oninput: (e) => { card.name = e.target.value; $('#join-error').hidden = true; },
+    }),
+    el('button', {
+      class: 'icon-btn', type: 'button', 'aria-label': '이 캡처 빼기', title: '빼기',
+      onclick: () => { URL.revokeObjectURL(card.preview); state.friendCards = state.friendCards.filter((c) => c !== card); renderJoin(); },
+    }, [icon('x', 16)]),
+  ])));
+}
+
 function renderJoin() {
   const friend = state.mode === 'solo' && state.solo.adding === 'friend'; // 혼자 비교하기에서 친구 시간표를 올리는 중
   const me = state.mode === 'solo' ? (friend ? null : (soloMe() || {}).name || null) : myName();
   $('#join-title').textContent = friend ? '친구 시간표 추가' : me ? '내 시간표 다시 올리기' : '내 시간표 올리기';
-  $('#join-name-label').textContent = friend ? '친구 이름' : '내 이름';
+  $('#join-name-label').textContent = '내 이름';
   const nameInput = $('#join-name');
-  $('#join-name-field').hidden = friend; // 친구 시간표는 캡처를 먼저 받고, 이름은 확인 화면에서 한 장씩 적는다
+  $('#join-name-field').hidden = friend; // 친구는 캡처를 먼저 받고, 이름은 카드에서 적는다
   $('#join-file').multiple = friend;
   $('#join-file-sub').textContent = friend ? '여러 장을 한 번에 골라도 돼요' : '에브리타임 시간표 탭을 캡처해서 올려 주세요';
-  nameInput.placeholder = friend ? '이 시간표 주인의 이름' : state.mode === 'solo' ? '내 이름' : '친구들이 알아볼 이름';
+  nameInput.placeholder = state.mode === 'solo' ? '내 이름' : '친구들이 알아볼 이름';
   if (!nameInput.value && me) nameInput.value = me;
   $('#join-error').hidden = true;
 
-  const files = friend ? state.joinFiles : state.joinFile ? [state.joinFile] : [];
   const preview = $('#join-preview');
-  if (files.length === 1) {
-    preview.src = URL.createObjectURL(files[0]);
+  const btn = $('#join-next');
+  if (friend) {
+    preview.hidden = true;
+    renderCards();
+    $('#join-file-label').textContent = state.friendCards.length ? '캡처 더 추가' : '친구 시간표 캡처 선택';
+    btn.textContent = '추가';
+    btn.disabled = !state.friendCards.length;
+    return;
+  }
+  $('#join-cards').hidden = true;
+  if (state.joinFile) {
+    preview.src = URL.createObjectURL(state.joinFile);
     preview.hidden = false;
     $('#join-file-label').textContent = '다른 캡처로 바꾸기';
-  } else if (files.length > 1) {
-    preview.hidden = true;
-    $('#join-file-label').textContent = `${files.length}장 선택됨 · 다시 고르기`;
   } else {
     preview.hidden = true;
-    $('#join-file-label').textContent = friend ? '친구 시간표 캡처 선택' : '내 시간표 캡처 선택';
+    $('#join-file-label').textContent = '내 시간표 캡처 선택';
   }
-  const btn = $('#join-next');
   btn.textContent = '인식하기';
-  btn.disabled = !files.length;
+  btn.disabled = !state.joinFile;
 }
 
 async function joinParse() {
@@ -848,28 +904,42 @@ async function joinParse() {
   go('review');
 }
 
-// 친구 시간표: 고른 캡처를 차례로 인식하고, 이름은 확인 화면에서 한 장씩 적는다
+// 친구 시간표: 카드마다 이름을 받고, 캡처를 차례로 인식한다.
+// 문제없이 읽힌 시간표는 바로 추가하고, 경고나 실패가 있는 것만 확인 화면에서 고친다
 async function joinParseFriends() {
-  const files = state.joinFiles;
-  const room = SOLO_MAX - state.solo.members.length;
-  if (files.length > room) {
-    const box = $('#join-error');
-    box.textContent = `한 번에 ${SOLO_MAX}명까지 비교할 수 있어요. 지금은 ${room}장까지 고를 수 있어요.`;
-    box.hidden = false;
-    return;
-  }
+  const cards = state.friendCards;
+  const box = $('#join-error');
+  const inputs = [...document.querySelectorAll('#join-cards input')];
+  const fail = (message, input) => { box.textContent = message; box.hidden = false; if (input) input.focus(); };
+  const names = cards.map((c) => c.name.trim());
+  const empty = names.findIndex((n) => !n);
+  if (empty >= 0) return fail('친구 이름을 모두 적어 주세요.', inputs[empty]);
+  const dup = names.findIndex((n, i) => names.indexOf(n) !== i || state.solo.members.some((m) => m.name === n));
+  if (dup >= 0) return fail(`이미 있는 이름이에요: ${names[dup]}. 구분되는 이름으로 바꿔 주세요.`, inputs[dup]);
+
   const btn = $('#join-next');
   btn.disabled = true;
-  const drafts = [];
-  for (let i = 0; i < files.length; i += 1) {
-    btn.textContent = files.length > 1 ? `인식 중 ${i + 1}/${files.length}` : '인식 중...';
-    const d = { name: '', status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9 };
-    await parseDraft(d, files[i]);
-    drafts.push(d);
+  const { members } = state.solo;
+  const needReview = [];
+  for (let i = 0; i < cards.length; i += 1) {
+    btn.textContent = cards.length > 1 ? `인식 중 ${i + 1}/${cards.length}` : '인식 중...';
+    const d = { name: names[i], status: 'parsing', error: null, warnings: [], classes: [], gridStart: 9, preview: cards[i].preview };
+    await parseDraft(d, cards[i].file);
+    if (d.status === 'done' && !d.warnings.length && d.classes.length) {
+      members.push({ name: d.name, classes: d.classes.map(({ day, start, end }) => ({ day, start, end })) });
+    } else {
+      needReview.push(d);
+    }
   }
-  state.queue = drafts;
+  await computeSolo();
+  if (!needReview.length) {
+    clearCards();
+    history.back(); // 올리기 화면 한 칸만 걷어내고 혼자 비교하기 결과로
+    return;
+  }
+  state.queue = needReview;
   state.queueIndex = 0;
-  state.draft = drafts[0];
+  state.draft = needReview[0];
   go('review');
 }
 
@@ -998,6 +1068,13 @@ function renderReview() {
     el('input', { id: 'review-name', value: d.name, maxlength: 20, placeholder: friend ? '친구 이름' : '이름', oninput: (e) => { d.name = e.target.value; } }),
   ]));
 
+  if (d.preview) {
+    panel.append(el('button', { class: 'source-thumb', type: 'button', onclick: () => openCapture(d.preview, '원본 캡처') }, [
+      el('img', { src: d.preview, alt: '원본 캡처' }),
+      el('span', { text: '원본 캡처 · 누르면 크게 보여요' }),
+    ]));
+  }
+
   if (d.status === 'error') {
     panel.append(el('div', { class: 'alert error', text: `${d.error} 다른 캡처로 다시 하거나 아래에서 직접 추가해 주세요.` }));
   }
@@ -1054,9 +1131,15 @@ function showReviewError(message) {
 // ---- 이벤트 연결 -----------------------------------------------------------
 $('#create-group').addEventListener('click', createGroup);
 $('#join-file').addEventListener('change', (e) => {
-  state.joinFiles = Array.from(e.target.files);
-  state.joinFile = state.joinFiles[0] || null;
+  const files = Array.from(e.target.files);
   e.target.value = '';
+  if (state.mode === 'solo' && state.solo.adding === 'friend') {
+    const note = addCards(files);
+    renderJoin();
+    if (note) { $('#join-error').textContent = note; $('#join-error').hidden = false; }
+    return;
+  }
+  state.joinFile = files[0] || null;
   renderJoin();
 });
 $('#join-next').addEventListener('click', joinParse);
