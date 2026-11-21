@@ -266,7 +266,7 @@ body.home .app-header { background: transparent; border-bottom-color: transparen
 .btn-icon { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ---- 첫 화면 두 번째 선택지(혼자 비교하기), 이미지 저장 ---- */
-#solo-action { margin: 12px 0 4px; }
+#solo-action { margin: 12px 0 4px; display: flex; flex-direction: column; gap: 8px; }
 #solo-result { margin-top: 14px; }
 .chips { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chips li {

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공강메이트 화면 모아보기 (개발용)</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #e9e9ef; color: #1c1c28; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 10px 20px; background: #fff; border-bottom: 1px solid #d6d6e0; }
+  header h1 { margin: 0; font-size: 16px; }
+  header .grow { flex: 1; }
+  header label { display: flex; align-items: center; gap: 6px; }
+  #status { color: #667; font-size: 13px; }
+  #status.live::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #2fa84f; }
+  #status.dead::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #c0392b; }
+  main { display: flex; flex-wrap: wrap; gap: 28px 24px; padding: 20px; align-items: flex-start; }
+  .scene h2 { margin: 0 0 6px; font-size: 13px; color: #445; font-weight: 600; }
+  .scene .group-name { color: #889; font-weight: 400; }
+  .frame { overflow: hidden; background: #fff; border: 1px solid #c9c9d6; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  iframe { display: block; width: 390px; height: 844px; border: 0; transform-origin: top left; }
+</style>
+</head>
+<body>
+<header>
+  <h1>공강메이트 화면 모아보기</h1>
+  <label>크기
+    <select id="zoom">
+      <option value="0.5">50%</option>
+      <option value="0.6">60%</option>
+      <option value="0.75" selected>75%</option>
+      <option value="1">100%</option>
+    </select>
+  </label>
+  <label>높이
+    <select id="height">
+      <option value="844" selected>844 (아이폰 14)</option>
+      <option value="667">667 (작은 폰)</option>
+      <option value="1100">1100 (길게)</option>
+    </select>
+  </label>
+  <span class="grow"></span>
+  <span id="status">연결 중</span>
+  <button id="reload" type="button">전체 새로고침</button>
+</header>
+<main id="board"></main>
+
+<script>
+// 실제 앱(/)을 iframe으로 띄우고, 같은 출처라서 앱 안의 상태를 직접 채워 각 화면을 만든다.
+// 앱 코드는 건드리지 않는다. 화면이 하나 늘어나면 SCENES 에 한 줄만 추가하면 된다.
+const demo = {};   // { 재호: [{day,start,end}], ... }
+
+// 아래 함수들은 iframe 안에서 실행된다(앱의 state, show 등을 그대로 쓴다). 바깥 변수는 쓰지 말 것.
+const SCENES = [
+  { title: '첫 화면', run: () => { show('home'); } },
+
+  { title: '혼자 비교하기 (처음)', run: () => {
+    state.mode = 'solo'; state.solo = { members: [], result: null, error: null, adding: null }; show('solo');
+  } },
+  { title: '혼자 비교하기 (내 시간표만)', run: (d) => {
+    state.mode = 'solo'; state.solo = { members: [{ name: '재호', classes: d['재호'], me: true }], result: null, error: null, adding: null }; show('solo');
+  } },
+  { title: '혼자 비교하기 (결과)', run: async (d) => {
+    state.mode = 'solo';
+    state.solo = { members: [{ name: '재호', classes: d['재호'], me: true }, { name: '민지', classes: d['민지'] }, { name: '서준', classes: d['서준'] }], result: null, error: null, adding: null };
+    await computeSolo(); show('solo');
+  } },
+  { title: '혼자 비교하기 (친구 시간표 올리기)', run: () => {
+    state.mode = 'solo'; state.solo = { members: [{ name: '재호', classes: [], me: true }], result: null, error: null, adding: 'friend' }; state.joinFile = null; show('join');
+  } },
+
+  { title: '그룹 (아무도 없음)', run: () => {
+    state.mode = 'group'; state.group = { id: 'demo', name: '캡스톤 스터디', members: [], loadedAt: new Date() }; state.result = null; show('group');
+  } },
+  { title: '그룹 (결과)', run: async (d) => {
+    const members = ['재호', '민지', '서준', '유나'].map((n, i) => ({ id: `m${i}`, name: n, classes: d[n] }));
+    localStorage.setItem('gongang:group:demo', JSON.stringify({ memberId: 'm0', name: '재호' }));
+    state.mode = 'group';
+    state.group = { id: 'demo', name: '캡스톤 스터디', members, loadedAt: new Date() };
+    state.result = await postJSON('/api/free', { members: members.map((m) => ({ name: m.name, classes: m.classes })) });
+    show('group');
+  } },
+  { title: '그룹 (칸을 눌렀을 때)', run: async (d) => {
+    const members = ['재호', '민지', '서준', '유나'].map((n, i) => ({ id: `m${i}`, name: n, classes: d[n] }));
+    localStorage.setItem('gongang:group:demo', JSON.stringify({ memberId: 'm0', name: '재호' }));
+    state.mode = 'group';
+    state.group = { id: 'demo', name: '캡스톤 스터디', members, loadedAt: new Date() };
+    state.result = await postJSON('/api/free', { members: members.map((m) => ({ name: m.name, classes: m.classes })) });
+    show('group');
+    const s = [...state.result.segments].sort((a, b) => b.count - a.count || b.minutes - a.minutes)[0];
+    if (s) openDetail(s, '재호');
+  } },
+
+  { title: '시간표 올리기', run: () => { state.mode = 'group'; state.group = { id: 'demo', name: '', members: [] }; state.joinFile = null; show('join'); } },
+  { title: '인식 결과 확인', run: (d) => {
+    state.mode = 'group'; state.group = { id: 'demo', name: '', members: [] };
+    state.draft = { name: '재호', status: 'done', error: null, warnings: [], gridStart: 9,
+      classes: d['재호'].map((c, i) => ({ ...c, id: 9000 + i, color: PALETTE[i % PALETTE.length] })) };
+    show('review');
+  } },
+  { title: '인식 결과 확인 (경고)', run: (d) => {
+    state.mode = 'solo'; state.group = { id: 'demo', name: '', members: [] };
+    state.draft = { name: '민지', status: 'done', error: null, gridStart: 9,
+      warnings: [{ code: 'cut_off', message: '시간표가 17시까지만 보여요. 그 뒤 수업은 직접 추가해 주세요.' }],
+      classes: d['민지'].map((c, i) => ({ ...c, id: 9100 + i, color: PALETTE[i % PALETTE.length] })) };
+    show('review');
+  } },
+  { title: '인식 실패 (직접 입력)', run: () => {
+    state.mode = 'group'; state.group = { id: 'demo', name: '', members: [] };
+    state.draft = { name: '', status: 'error', error: '시간표를 찾지 못했어요.', warnings: [], classes: [], gridStart: 9 };
+    show('review');
+  } },
+];
+
+const board = document.getElementById('board');
+const zoomSel = document.getElementById('zoom');
+const heightSel = document.getElementById('height');
+const frames = [];
+
+function layout() {
+  const z = Number(zoomSel.value), h = Number(heightSel.value);
+  for (const { frame, iframe } of frames) {
+    iframe.style.height = `${h}px`;
+    iframe.style.transform = `scale(${z})`;
+    frame.style.width = `${390 * z}px`;
+    frame.style.height = `${h * z}px`;
+  }
+  try { localStorage.setItem('screens:view', JSON.stringify({ z: zoomSel.value, h: heightSel.value })); } catch (e) {}
+}
+
+function build() {
+  for (const scene of SCENES) {
+    const wrap = document.createElement('section');
+    wrap.className = 'scene';
+    const h2 = document.createElement('h2');
+    h2.textContent = scene.title;
+    const frame = document.createElement('div');
+    frame.className = 'frame';
+    const iframe = document.createElement('iframe');
+    iframe.title = scene.title;
+    iframe.addEventListener('load', () => drive(iframe, scene));
+    frame.append(iframe);
+    wrap.append(h2, frame);
+    board.append(wrap);
+    frames.push({ frame, iframe, scene });
+  }
+  layout();
+}
+
+function drive(iframe, scene) {
+  const w = iframe.contentWindow;
+  if (w.location.href === 'about:blank') return; // 처음 빈 iframe 의 load 는 건너뛴다
+  const code = `(async () => { try { await (${scene.run.toString()})(${JSON.stringify(demo)}); } catch (e) { console.error(e); } })()`;
+  // 앱의 시작 코드(start)가 끝난 뒤에 화면을 만든다
+  setTimeout(() => { try { w.eval(code); } catch (e) { console.error(e); } }, 60);
+}
+
+function loadAll() {
+  for (const { iframe } of frames) iframe.src = `/?screens=${Date.now()}`;
+}
+
+// 화면 확인용 가짜 시간표. 결과 화면에 공강 칸이 여러 개 보이도록 요일마다 수업을 흩어 놓았다.
+const T = (day, start, end) => ({ day, start, end });
+const DEMO_DATA = {
+  재호: [T('MON','09:00','10:15'), T('MON','13:30','14:45'), T('TUE','10:30','11:45'), T('TUE','15:00','16:15'), T('WED','09:00','10:15'),
+        T('WED','14:00','15:15'), T('THU','10:30','11:45'), T('THU','16:00','17:15'), T('FRI','09:00','10:15'), T('FRI','13:00','14:15')],
+  민지: [T('MON','09:00','10:15'), T('MON','15:00','16:15'), T('TUE','09:00','10:15'), T('TUE','14:00','15:15'), T('WED','10:30','11:45'),
+        T('WED','16:00','17:15'), T('THU','09:00','10:15'), T('THU','13:30','14:45'), T('FRI','10:30','11:45'), T('FRI','15:00','16:15')],
+  서준: [T('MON','10:30','11:45'), T('MON','16:00','17:15'), T('TUE','10:30','11:45'), T('TUE','16:00','17:15'), T('WED','09:00','10:15'),
+        T('WED','15:00','16:15'), T('THU','11:00','12:15'), T('THU','15:00','16:15'), T('FRI','09:00','10:15'), T('FRI','14:00','15:15')],
+  유나: [T('MON','09:00','10:15'), T('MON','14:00','15:15'), T('TUE','13:00','14:15'), T('TUE','16:00','17:15'), T('WED','10:30','11:45'),
+        T('WED','14:00','15:15'), T('THU','09:00','10:15'), T('THU','16:00','17:15'), T('FRI','10:30','11:45'), T('FRI','16:00','17:15')],
+};
+Object.assign(demo, DEMO_DATA);
+
+// 파일을 저장하면 서버가 알려 주고, 그때 전체를 다시 불러온다
+let stamp = null;
+async function poll() {
+  const status = document.getElementById('status');
+  try {
+    const r = await fetch('/_stamp', { cache: 'no-store' });
+    const s = (await r.json()).stamp;
+    status.textContent = '파일을 저장하면 자동으로 바뀌어요';
+    status.className = 'live';
+    if (stamp !== null && s !== stamp) loadAll();
+    stamp = s;
+  } catch (e) {
+    status.textContent = '개발 서버에 연결되지 않았어요';
+    status.className = 'dead';
+  }
+}
+
+(async () => {
+  try {
+    const v = JSON.parse(localStorage.getItem('screens:view') || 'null');
+    if (v) { zoomSel.value = v.z; heightSel.value = v.h; }
+  } catch (e) {}
+  zoomSel.addEventListener('change', layout);
+  heightSel.addEventListener('change', layout);
+  document.getElementById('reload').addEventListener('click', loadAll);
+  build();
+  loadAll();
+  poll();
+  setInterval(poll, 1000);
+})();
+</script>
+</body>
+</html>

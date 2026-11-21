@@ -16,18 +16,49 @@ from core.web import error, handle_free, handle_parse, read_body, respond
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(ROOT, "public")
+DEV = os.path.join(ROOT, "dev")
 ROUTES = {"/api/parse": handle_parse, "/api/free": handle_free}
+
+
+def public_stamp():
+    """public/ 안 파일 중 가장 늦게 저장된 시각. 화면 모아보기가 바뀜을 알아채는 데 쓴다."""
+    latest = 0
+    for folder, _, files in os.walk(PUBLIC):
+        for name in files:
+            latest = max(latest, os.stat(os.path.join(folder, name)).st_mtime_ns // 1_000_000)
+    return latest
+
+
+def send_file(handler, path, content_type):
+    with open(path, "rb") as f:
+        data = f.read()
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(data)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(data)
 
 
 class DevHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=PUBLIC, **kwargs)
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")  # 개발 중에는 저장한 파일이 바로 보이게
+        super().end_headers()
+
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == "/api/group":
             query = {k: v[0] for k, v in parse_qs(url.query).items()}
             respond(self, *handle_group("GET", query, b"", make_store()))
+            return
+        if url.path == "/_screens":  # 개발용 화면 모아보기 (배포에는 포함되지 않음)
+            send_file(self, os.path.join(DEV, "screens.html"), "text/html; charset=utf-8")
+            return
+        if url.path == "/_stamp":
+            respond(self, 200, {"stamp": public_stamp()})
             return
         super().do_GET()
 

@@ -16,6 +16,8 @@ python dev_server.py           # http://localhost:8000
 
 같은 와이파이의 휴대폰에서는 `http://<PC의 IP>:8000` 으로 접속한다.
 
+모든 화면을 폰 크기로 나란히 보려면 서버를 켠 채 `http://localhost:8000/_screens` 를 연다. `public/` 의 파일을 저장하면 자동으로 다시 불러온다. 화면을 더 넣으려면 `dev/screens.html` 의 `SCENES` 에 한 줄을 추가한다. 개발용이라 배포(`public/`)에는 포함되지 않는다.
+
 ## 테스트와 측정
 
 ```bash
@@ -90,6 +92,7 @@ supabase/schema.sql  테이블·SQL 함수·권한
 core/parser.py     이미지 인식 (Pillow, 규칙 기반)
 core/free.py       공강 계산 (5분 칸 288개, 같은 사람 조합이 이어진 구간으로 묶기)
 core/web.py        요청/응답 처리 (Vercel 함수와 dev_server 공용)
+dev/screens.html   화면 모아보기 (개발용, dev_server 에서만 열림)
 tests/             pytest (tests/synth.py 가 합성 캡처 생성)
 tools/             시연 샘플 생성, 정확도 측정
 ```

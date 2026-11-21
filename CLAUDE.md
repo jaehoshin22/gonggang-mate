@@ -13,6 +13,7 @@
 
 ```
 python dev_server.py     # http://localhost:8000
+                         # 모든 화면 모아보기(개발용): http://localhost:8000/_screens
 python -m pytest -q
 ```
 
