@@ -40,28 +40,19 @@
 
 ## 설치와 실행
 
-사전 준비: Python 3.11 이상 (`python --version` 으로 확인)
+사전 준비: Python 3.11 이상 (`python --version` 으로 확인. macOS 는 `python3`)
 
 1. 프로젝트 폴더로 이동한다 (zip 이면 압축을 풀고 그 폴더를 연다). 아래 명령은 모두 이 폴더에서 실행한다.
-2. 패키지를 설치한다.
+2. 패키지를 설치한다: `python -m pip install -r requirements.txt`
+3. 서버를 실행한다: `python dev_server.py`
+4. 브라우저에서 **http://localhost:8000** 을 연다. 서버를 끌 때는 터미널에서 `Ctrl+C`.
 
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3. 서버를 실행한다.
-
-    ```bash
-    python dev_server.py
-    ```
-
-4. 브라우저에서 **http://localhost:8000** 을 연다.
-
-여기까지 하면 앱이 뜨고 모든 기능을 쓸 수 있다. 다른 설정이나 계정은 필요 없다. (그룹 저장은 Supabase 설정이 없으면 서버 메모리에 저장되며, 서버를 끄면 사라진다.)
+여기까지 하면 앱이 뜨고 모든 기능을 쓸 수 있다. 다른 설정이나 계정은 필요 없다. (그룹 저장은 Supabase 설정이 없으면 서버 메모리에 저장되며, 서버를 끄면 사라진다.) 8000번 포트를 이미 쓰고 있으면 `python dev_server.py 8001` 처럼 다른 번호를 붙인다.
 
 시험해 볼 시간표 이미지는 `samples/demo-result/` 에 4장이 들어 있다 (합성 데이터, 실제 사람의 시간표가 아님). 공통 공강이 나오도록 만든 것이다.
 
 **참고 (필요할 때만)**
+
 - 휴대폰으로 접속: 같은 와이파이에서 `http://<PC의 IP>:8000`
 - 시연용 캡처를 새로 만들기: `python tools/make_samples.py` (`samples/demo` 에 4장 생성)
 - 화면을 폰 크기로 나란히 보기(개발용): 서버를 켠 채 `http://localhost:8000/_screens`
@@ -72,6 +63,7 @@
 에브리타임에서 시간표를 캡처해 두고 시작한다. 두 가지 방법이 있다.
 
 **그룹 링크로 모으기** (친구가 직접 올림)
+
 1. 첫 화면에서 그룹 이름(선택)을 적고 "그룹 만들고 링크 받기"를 누른다.
 2. "링크 공유"로 카카오톡방에 링크를 올린다.
 3. 각자 링크를 열어 "내 시간표 올리기"에서 캡처 한 장과 이름을 올린다.
@@ -79,6 +71,7 @@
 5. 그룹 화면의 주간 시간표에 같이 비는 시간과 되는 사람 이름이 자동으로 나타난다. 칸을 누르면 자세히 볼 수 있고, "이미지로 저장"으로 카톡방에 결과를 올릴 수 있다.
 
 **혼자 비교하기** (링크 없이, 서버에 저장하지 않음)
+
 1. 첫 화면에서 "혼자 비교하기"를 누르고 내 시간표를 먼저 올린다.
 2. "친구 시간표 추가"에서 친구 캡처를 여러 장 한 번에 고르고, 카드마다 이름을 적고 "추가"를 누른다.
 3. 인식에 문제가 있는 장만 확인 화면으로 넘어간다. 고치거나 건너뛸 수 있다.
@@ -87,8 +80,9 @@
 ## 테스트와 측정
 
 ```bash
+python -m pip install pytest   # 테스트 도구 (처음 한 번)
 python -m pytest               # 단위 테스트 (공강 계산, 이미지 인식, API, 그룹)
-pip install playwright && python -m playwright install chromium
+python -m pip install playwright && python -m playwright install chromium
 python -m pytest tests/e2e --e2e   # 화면 흐름 테스트 (E2E_CHROME 으로 크롬 경로 지정 가능)
 # 그룹 SQL까지 실제 PostgreSQL로 검증하려면 (psycopg 필요)
 PG_TEST_DSN="host=localhost user=postgres dbname=postgres" python -m pytest tests/test_group.py
@@ -223,13 +217,8 @@ python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정
 
 1. supabase.com 에서 새 프로젝트를 만든다 (Region: Northeast Asia (Seoul)).
 2. SQL Editor 에 `supabase/schema.sql` 전체를 붙여 넣고 Run. 이어서 `supabase/schedule.sql` 도 Run 하면 180일 지난 그룹이 매일 자동으로 지워진다.
-3. 두 값을 복사한다.
-   - Project URL (`https://xxxx.supabase.co`)
-   - Secret key (`sb_secret_...`). 예전 프로젝트라면 Legacy 탭의 `service_role` 키도 동작한다.
-     **브라우저 코드나 GitHub에 절대 넣지 않는다.**
-4. Vercel → 프로젝트 → Settings → Environment Variables 에 추가하고 다시 배포한다.
-   - `SUPABASE_URL` = Project URL
-   - `SUPABASE_SERVICE_KEY` = Secret key (`sb_secret_...`)
+3. Project URL(`https://xxxx.supabase.co`)과 Secret key(`sb_secret_...`)를 복사한다. 예전 프로젝트라면 Legacy 탭의 `service_role` 키도 동작한다. **Secret key 는 브라우저 코드나 GitHub에 절대 넣지 않는다.**
+4. Vercel → 프로젝트 → Settings → Environment Variables 에 `SUPABASE_URL`(Project URL)과 `SUPABASE_SERVICE_KEY`(Secret key)를 추가하고 다시 배포한다.
 5. 로컬에서는 환경변수가 없으면 메모리에 저장한다 (`python dev_server.py`, 서버를 끄면 사라짐).
 
 ### 데이터 구조 (10주차 SQL)
@@ -360,6 +349,7 @@ samples/demo-result/   공통 공강이 나오도록 만든 합성 캡처 4장 (
 ```
 
 응답
+
 - `overlaps`: 같이 비는 공강 목록. 항목마다 `names`(되는 사람), `everyone`(전원 여부). 많은 사람이 겹치는 순서
 - `segments`: 그리드 표시용으로 같은 사람들이 겹치는 구간 (서로 겹치지 않음)
 - `everyone_count`: 전원이 비는 공강 수
@@ -367,6 +357,7 @@ samples/demo-result/   공통 공강이 나오도록 만든 합성 캡처 4장 (
 `GET /api/group?g=<그룹ID>` → `{"ok": true, "group": {"id", "name", "members": [{"id", "name", "classes"}]}}`
 
 `POST /api/group`
+
 - `{"action": "create", "name": "소융 밥약"}` → `group_id`
 - `{"action": "save", "group_id", "member_id"(수정 시), "name", "classes", "claim"(같은 이름 덮어쓰기, 화면에서는 쓰지 않음)}` → `member_id`
 
