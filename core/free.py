@@ -48,6 +48,8 @@ def _free_slots(classes):
     """{요일: [bool]*288} — True 면 그 칸이 공강 (첫 수업~마지막 수업 사이의 빈 칸)."""
     busy = {day: [False] * N_SLOTS for day in WEEKDAYS}
     for item in classes:
+        if not isinstance(item, dict):
+            raise ValueError(f"수업 형식이 올바르지 않아요: {item!r}")
         day = item.get("day")
         start = to_minutes(item.get("start"))
         end = to_minutes(item.get("end"))

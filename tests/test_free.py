@@ -88,6 +88,7 @@ def test_weekend_classes_are_ignored():
     [member("A", ("MON", "25:00", "26:00"))],
     [member("A", ("MON", "abc", "11:00"))],
     [member(f"m{i}") for i in range(21)],
+    [{"name": "A", "classes": ["x"]}],
 ])
 def test_invalid_input_raises(members):
     with pytest.raises(ValueError):

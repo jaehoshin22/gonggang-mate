@@ -49,6 +49,7 @@ GAP_FILL_HOURS = 0.08        # 이 이하 틈은 같은 블록 (글자 사이 �
 MIN_BLOCK_HOURS = 0.15       # 이보다 짧은 색 구간은 무시 (약 9분)
 BLOCK_TOP_INSET_HOURS = 0.03 # 블록 윗변이 시각 선보다 아래로 들어간 정도 (실측 2~3px / 1시간 74px)
 HUE_SPLIT = 14               # 색상 차이가 이 이상이면 다른 수업
+MAX_PIXELS = 20_000_000      # 휴대폰·태블릿 캡처(약 100만~600만 픽셀)보다 넉넉한 상한. 넘으면 인식하지 않는다
 DARK_MEAN_VAL = 90           # 평균 밝기가 이보다 낮으면 다크모드
 END_HOUR_EXPECTED = 17       # 에브리타임은 수업이 없어도 17시까지는 보여 준다(기본 범위). 격자가 이보다 일찍 끝나면 잘린 캡처로 보고 경고
 
@@ -295,9 +296,14 @@ def _to_class(day, top_px, bottom_px, px_per_hour, color, cut_end=False):
 def _open(data):
     if not data:
         raise ParseError("empty", "이미지가 비어 있어요.")
+    too_large = ParseError("too_large", "이미지 해상도가 너무 커요. 휴대폰 화면 캡처를 올려 주세요.")
     try:
-        img = Image.open(BytesIO(data))
+        img = Image.open(BytesIO(data))  # 여기서는 머리글만 읽는다
+        if img.width * img.height > MAX_PIXELS:
+            raise too_large
         img.load()
+    except Image.DecompressionBombError:  # Pillow 자체 상한을 넘는 이미지
+        raise too_large
     except (UnidentifiedImageError, OSError):
         raise ParseError("not_image", "이미지 파일이 아니에요.")
     return img.convert("RGB")

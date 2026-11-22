@@ -36,3 +36,9 @@ def test_free_bad_input_message_is_korean():
     payload = {"members": [{"name": "A", "classes": []}, {"name": "A", "classes": []}]}
     status, body = handle_free(json.dumps(payload).encode())
     assert status == 400 and "중복" in body["error"]["message"]
+
+
+def test_free_class_not_object_is_400_not_500():
+    payload = {"members": [{"name": "A", "classes": ["x"]}]}
+    status, body = handle_free(json.dumps(payload).encode())
+    assert status == 400 and body["error"]["code"] == "bad_input"

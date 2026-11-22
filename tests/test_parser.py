@@ -133,6 +133,13 @@ def test_blank_black_is_not_timetable():
     assert e.value.code == "not_timetable"
 
 
+def test_huge_resolution_is_rejected_before_decoding():
+    """파일은 작아도 해상도가 아주 큰 이미지는 풀기 전에 거절한다 (서버 메모리 보호)."""
+    with pytest.raises(ParseError) as e:
+        parse_timetable(_png(Image.new("RGB", (5000, 5000), "white")))
+    assert e.value.code == "too_large"
+
+
 # ---- 다크모드 ----------------------------------------------------------------
 
 def test_dark_mode_recognizes_all_blocks():
