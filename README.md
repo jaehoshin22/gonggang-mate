@@ -81,25 +81,77 @@ groups (id, name, created_at)
 
 ## 구조
 
+이 프로젝트는 세 구역으로 나뉜다. 폴더 이름만으로는 구분이 안 되니 아래 표로 확인한다.
+
+| 구역 | 폴더 | 실행되는 곳 |
+|---|---|---|
+| 프런트엔드 (화면) | `public/` | 사용자의 브라우저 |
+| 백엔드 (서버) | `api/`, `core/` | Vercel 서버 (Python) |
+| 데이터베이스 | `supabase/` | Supabase (PostgreSQL) |
+| 개발·검증용 | `tests/`, `tools/`, `dev/`, `dev_server.py`, `samples/` | 내 컴퓨터에서만 (서비스에는 쓰이지 않음) |
+
 ```
-public/            화면 (HTML, CSS Grid, 바닐라 JS)
-  app.js           업로드(F3) → 확인·수정(F2) → 공강 결과(F4~F6), 혼자 비교하기, 결과 이미지 저장,
-                   화면 이동은 History API(화면마다 기록 한 칸, 뒤로가기는 popstate)
-api/parse.py       POST /api/parse  캡처 한 장 → 수업 목록
-api/free.py        POST /api/free   멤버 시간표들 → 공통 공강·차선 시간
-api/group.py       GET/POST /api/group  그룹 만들기·조회·내 시간표 저장 (F7)
-core/group.py      그룹 요청 검증·처리
-core/store.py      Supabase 호출 / 메모리 저장소
-supabase/schema.sql  테이블·SQL 함수·권한
-supabase/schedule.sql  오래된 그룹을 매일 지우는 예약 작업 (pg_cron)
-core/parser.py     이미지 인식 (Pillow, 규칙 기반)
-core/free.py       공강 계산 (5분 칸 288개, 같은 사람 조합이 이어진 구간으로 묶기)
-core/web.py        요청/응답 처리 (Vercel 함수와 dev_server 공용)
-dev/screens.html   화면 모아보기 (개발용, dev_server 에서만 열림)
-tests/             pytest (tests/synth.py 가 합성 캡처 생성)
-  e2e/             화면 흐름 Playwright 테스트 (--e2e 로만 실행)
-tools/             시연 샘플 생성, 정확도 측정
+public/                프런트엔드: 브라우저에서 실행되는 화면
+  index.html           화면 뼈대 (#step-* 구역이 화면 하나씩)
+  style.css            모양 (CSS 는 여기만)
+  img/                 첫 화면 그림, 아이콘
+  js/                  화면 동작. index.html 에 적힌 순서대로 불러온다
+    state.js           상수와 전역 상태
+    utils.js           범용 도구 (DOM 만들기, 시간 변환, 서버 요청, 이 기기 저장소)
+    errors.js          예외 처리: 겹치는 수업, 같은 이름, 입력 검증, 오류 표시
+    navigation.js      화면 전환과 뒤로가기 (History API, popstate)
+    timetable.js       주간 시간표 그리드, 공강 결과 그리기
+    recognize.js       캡처 인식 요청 (/api/parse)
+    result-image.js    결과를 PNG 이미지로 그려 저장 (canvas)
+    modal.js           팝업 (구간 상세, 캡처 크게 보기, 이미지 보기)
+    group.js           그룹: 만들기, 불러오기, 공유, 새로고침, 저장
+    solo.js            혼자 비교하기
+    upload.js          시간표 올리기 화면, 친구 캡처 카드
+    review.js          확인·수정 화면
+    main.js            이벤트 연결과 시작 (가장 마지막)
+
+api/                   백엔드 입구: 요청을 받아 core 로 넘기기만 한다 (Vercel 규칙상 이 이름과 위치 고정)
+  parse.py             POST /api/parse  캡처 한 장 -> 수업 목록
+  free.py              POST /api/free   멤버 시간표들 -> 공통 공강
+  group.py             GET/POST /api/group  그룹 만들기·조회·내 시간표 저장 (F7)
+core/                  백엔드 핵심 로직
+  handlers.py          요청 검사와 예외 -> 상태 코드 변환 (서버 예외 처리의 중심)
+  parser.py            이미지 인식 (Pillow, 규칙 기반)
+  free.py              공강 계산 (5분 칸 288개, 같은 사람 조합이 이어진 구간으로 묶기)
+  group.py             그룹 규칙 (이름, 멤버 저장 검증)
+  store.py             Supabase 호출 / 메모리 저장소
+  time_utils.py        시각 문자열 <-> 분 변환, 요일 상수
+supabase/
+  schema.sql           테이블·SQL 함수·권한
+  schedule.sql         오래된 그룹을 매일 지우는 예약 작업 (pg_cron)
+
+tests/                 pytest (tests/synth.py 가 합성 캡처 생성)
+  e2e/                 화면 흐름 Playwright 테스트 (--e2e 로만 실행)
+tools/                 시연 샘플 생성, 정확도 측정
+dev/screens.html       화면 모아보기 (개발용, dev_server 에서만 열림)
+dev_server.py          내 컴퓨터용 개발 서버 (화면과 API를 함께 띄움)
+samples/demo/          시연용 합성 캡처 (공개). samples/real 은 실제 캡처라 git 에 올리지 않는다
 ```
+
+### 백엔드 층과 일반적인 용어의 대응
+
+백엔드는 한 가지 방향으로만 호출한다: `api/` -> `core/handlers.py` -> `parser`·`free`·`group` -> `store`.
+
+| 일반적인 층 | 이 프로젝트 | 하는 일 |
+|---|---|---|
+| 라우터(입구) | `api/*.py` | 요청을 받아 넘기고 응답을 돌려준다 (25~31줄) |
+| 핸들러 | `core/handlers.py` | 입력을 검사하고, 예외를 상태 코드로 바꾼다 |
+| 서비스(업무 규칙) | `core/parser.py`, `free.py`, `group.py` | 인식, 공강 계산, 그룹 규칙 |
+| 저장소(데이터 접근) | `core/store.py` | Supabase 또는 메모리에 저장·조회 |
+
+### 예외 처리가 있는 곳
+
+| 상황 | 어디서 | 사용자에게 보이는 것 |
+|---|---|---|
+| 이미지가 너무 큼, 시간표가 아님, 잘못된 요청 | 서버 `core/handlers.py` | 오류 코드(413, 422, 400)와 안내 문구 |
+| 같은 이름, 이름 길이 | 서버 `core/group.py`, 화면 `public/js/errors.js` | 이름 칸 빨간 테두리와 한 줄 안내 |
+| 겹치는 수업, 끝나는 시각이 더 빠름 | 화면 `public/js/errors.js` | 다음 단계로 넘어가지 못하고 경고 표시 |
+| 서버에 연결하지 못함 | 화면 `public/js/utils.js` (`errText`) | "서버에 연결하지 못했어요." |
 
 ## API
 

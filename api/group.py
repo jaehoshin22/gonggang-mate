@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.group import handle_group  # noqa: E402
 from core.store import make_store  # noqa: E402
-from core.web import error, read_body, respond  # noqa: E402
+from core.handlers import error, read_body, respond  # noqa: E402
 
 
 def _query(path):

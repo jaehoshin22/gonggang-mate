@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from core.parser import ParseError, parse_timetable  # noqa: E402
-from core.timeutil import to_minutes  # noqa: E402
+from core.time_utils import to_minutes  # noqa: E402
 
 TOLERANCE = 5
 EXTS = (".png", ".jpg", ".jpeg", ".webp")

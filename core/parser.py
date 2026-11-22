@@ -23,7 +23,7 @@ from statistics import median
 
 from PIL import Image, ImageChops, UnidentifiedImageError
 
-from .timeutil import DAYS, to_hhmm
+from .time_utils import DAYS, to_hhmm
 
 # ---- 조정 가능한 상수 -------------------------------------------------------
 START_HOUR = 9               # 맨 위 눈금의 시각

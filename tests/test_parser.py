@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from core.parser import ParseError, parse_timetable
-from core.timeutil import DAYS, to_minutes
+from core.time_utils import DAYS, to_minutes
 from tests.synth import make_timetable
 
 SAMPLE = [

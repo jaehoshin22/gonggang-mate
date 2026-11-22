@@ -95,7 +95,8 @@ class MemoryStore:
         if not g:
             return []
         rows = []
-        members = sorted(g["members"].items(), key=lambda kv: (kv[1]["updated_at"], kv[1]["name"]))
+        # 저장 시각 순. 시각이 같으면(Windows 는 시계 해상도가 거칠다) 저장한 순서를 유지한다
+        members = sorted(g["members"].items(), key=lambda kv: kv[1]["updated_at"])
         for mid, m in members:
             base = {"group_name": g["name"], "member_id": mid, "member_name": m["name"],
                     "updated_at": m["updated_at"]}

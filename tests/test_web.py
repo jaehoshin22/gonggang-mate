@@ -1,6 +1,6 @@
 import json
 
-from core.web import MAX_IMAGE_BYTES, handle_free, handle_parse
+from core.handlers import MAX_IMAGE_BYTES, handle_free, handle_parse
 from tests.synth import make_timetable
 
 

@@ -10,7 +10,7 @@ import json
 import re
 
 from .store import StoreError
-from .timeutil import DAYS, to_hhmm, to_minutes
+from .time_utils import DAYS, to_hhmm, to_minutes
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")

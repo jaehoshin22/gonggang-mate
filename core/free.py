@@ -16,7 +16,7 @@
 계산량: 요일 5 x 칸 288 x 멤버 N
 """
 
-from .timeutil import DAY_LABELS, WEEKDAYS, to_hhmm, to_minutes
+from .time_utils import DAY_LABELS, WEEKDAYS, to_hhmm, to_minutes
 
 SLOT = 5
 N_SLOTS = 24 * 60 // SLOT  # 288

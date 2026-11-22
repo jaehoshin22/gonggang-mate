@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.web import error, handle_free, read_body, respond  # noqa: E402
+from core.handlers import error, handle_free, read_body, respond  # noqa: E402
 
 
 class handler(BaseHTTPRequestHandler):

@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from core.group import handle_group
 from core.store import make_store
-from core.web import error, handle_free, handle_parse, read_body, respond
+from core.handlers import error, handle_free, handle_parse, read_body, respond
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(ROOT, "public")
