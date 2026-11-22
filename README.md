@@ -44,13 +44,17 @@
 
 1. 프로젝트 폴더로 이동한다 (zip 이면 압축을 풀고 그 폴더를 연다). 아래 명령은 모두 이 폴더에서 실행한다.
 2. 패키지를 설치한다.
+
     ```bash
     pip install -r requirements.txt
     ```
+
 3. 서버를 실행한다.
+
     ```bash
     python dev_server.py
     ```
+
 4. 브라우저에서 **http://localhost:8000** 을 연다.
 
 여기까지 하면 앱이 뜨고 모든 기능을 쓸 수 있다. 다른 설정이나 계정은 필요 없다. (그룹 저장은 Supabase 설정이 없으면 서버 메모리에 저장되며, 서버를 끄면 사라진다.)
@@ -91,7 +95,7 @@ PG_TEST_DSN="host=localhost user=postgres dbname=postgres" python -m pytest test
 python tools/evaluate.py samples/real   # 실제 캡처 정확도·속도 측정 (비기능 요구사항)
 ```
 
-`python -m pytest` 의 기대 결과는 **실패 0개**다. Supabase 연동 테스트 4개(`PG_TEST_DSN` 환경변수가 있을 때만 실행)와 화면 테스트(`--e2e` 옵션이 있을 때만 실행)는 기본 실행에서 건너뛴다. 개발 환경(Python 3.11.9, Windows)에서는 `60 passed` 로 통과했다. 화면 테스트는 리눅스(Python 3.13)에서 `10 passed` 로 확인했다.
+`python -m pytest` 의 기대 결과는 **실패 0개**다. Supabase 연동 테스트 4개(`PG_TEST_DSN` 환경변수가 있을 때만 실행)와 화면 테스트(`--e2e` 옵션이 있을 때만 실행)는 기본 실행에서 건너뛴다. 개발 환경(Python 3.11.9, Windows)에서는 `62 passed` 로 통과했다. 화면 테스트는 리눅스(Python 3.13)에서 `10 passed` 로 확인했다.
 
 `samples/real/` 에 실제 캡처 `이름.png` 와 정답 `이름.json` 을 같이 둔다. 정답 형식은 `samples/demo/*.json` 참고. 실제 캡처는 친구들의 시간표라 저장소에 올리지 않는다.
 
