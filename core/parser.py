@@ -117,7 +117,7 @@ def _regular_run(lines, min_gap):
     빽빽한 시간표는 블록이 가로선을 덮어 일부 눈금만 보이므로, 이웃한 두 선의 간격을
     1시간 후보로 잡고 그 배수 위치에 있는 선들을 앞뒤로 모은다.
     """
-    best, best_count = [], 0
+    best, best_score, best_step = [], (0, 0), 0.0
     for i in range(len(lines) - 1):
         step = lines[i + 1] - lines[i]
         if step < min_gap:
@@ -129,15 +129,44 @@ def _regular_run(lines, min_gap):
         if sum(1 for _, k in ahead + behind if k == 1) < 1:
             continue
         real = sorted([lines[i], lines[i + 1]] + [p for p, _ in ahead + behind])
-        if len(real) > best_count:
-            best, best_count = real, len(real)
+        # 이웃한 눈금 쌍이 많은 후보를 우선한다. 헤더의 얇은 선이 끼어 간격이 절반(또는 어긋난 값)인
+        # 후보가 건너뛴 칸만으로 선 개수를 부풀려도, 이웃 쌍은 진짜 1시간 간격에서 가장 많이 나온다.
+        adjacent = 1 + sum(1 for _, k in ahead + behind if k == 1)
+        score = (adjacent, len(real))
+        if score > best_score:
+            best, best_score, best_step = real, score, step
+    if len(best) < 2:
+        return []
+    best = _fit_grid(best, best_step)
     if len(best) < 2:
         return []
     first, last = best[0], best[-1]
-    approx = min(b - a for a, b in zip(best, best[1:]))  # 이웃한 눈금 쌍이 있으므로 = 1시간
-    n = max(1, round((last - first) / approx))
+    n = max(1, round((last - first) / best_step))
     step = (last - first) / n
     return [first + step * j for j in range(n + 1)]
+
+
+def _fit_grid(real, step):
+    """눈금 후보를 일정한 간격의 직선(위치 = 시작 + 간격 x 번호)에 맞추고, 크게 벗어난 선은 뺀다.
+
+    헤더(학기 탭 밑줄 등)의 얇은 선이 격자 바로 위 한 칸쯤에 우연히 놓여 눈금으로 섞이면
+    간격 계산이 어긋나므로, 직선에서 벗어난 선을 걸러 낸다.
+    """
+    pts = list(real)
+    for _ in range(3):
+        idx = [round((x - pts[0]) / step) for x in pts]
+        n = len(pts)
+        mean_i, mean_x = sum(idx) / n, sum(pts) / n
+        var = sum((i - mean_i) ** 2 for i in idx)
+        if var == 0:
+            break
+        slope = sum((i - mean_i) * (x - mean_x) for i, x in zip(idx, pts)) / var
+        base = mean_x - slope * mean_i
+        kept = [x for i, x in zip(idx, pts) if abs(x - (base + slope * i)) <= max(2.0, step * 0.03)]
+        if len(kept) == len(pts) or len(kept) < 2:
+            break
+        pts = kept
+    return pts
 
 
 def _day_columns(v_lines, width):
@@ -316,8 +345,13 @@ def parse_timetable(data):
     while i < len(hours) - 1 and not has_frame(hours[i], hours[i + 1]):
         i += 1
     j = i
-    while j < len(hours) - 1 and has_frame(hours[j], hours[j + 1]):
-        j += 1
+    while j < len(hours) - 1:
+        if has_frame(hours[j], hours[j + 1]):
+            j += 1
+        elif j + 2 < len(hours) and has_frame(hours[j + 1], hours[j + 2]):
+            j += 2  # 월요일 수업 블록이 세로선 바로 옆에 붙어 한 칸만 가려진 경우는 끊기로 보지 않는다
+        else:
+            break
     hours = hours[i:j + 1]
     if len(hours) < 3:
         raise ParseError("not_timetable", "시간표를 찾지 못했어요.")

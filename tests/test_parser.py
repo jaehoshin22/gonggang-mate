@@ -186,3 +186,21 @@ def test_six_images_under_five_seconds():
     for img in images:
         parse_timetable(img)
     assert time.perf_counter() - start < 5
+
+
+# ---- 실제 캡처에서 나온 오류의 회귀 테스트 -----------------------------------------
+
+def test_header_lines_above_grid_do_not_skew_scale():
+    """격자 위에 얇은 가로선(학기 탭 밑줄 등)이 있어도 1시간 간격을 잘못 잡지 않는다.
+    예전에는 이 선이 눈금으로 섞여 시각이 모두 어긋나고, 24시 넘는 시각(24:10)이 나왔다."""
+    result = parse_timetable(make_timetable(SAMPLE, dark=True, tab_underline=True, hour_px=74, width=663))
+    assert_close(as_set(result["classes"]), expected(SAMPLE))
+    assert all(c["end"] <= "23:59" for c in result["classes"])
+
+
+def test_block_touching_label_line_does_not_cut_grid():
+    """월요일 블록이 시간 라벨 칸 세로선을 덮어도 격자가 중간에서 끊기지 않는다."""
+    classes = [(0, "15:00", "16:15"), (0, "17:00", "17:50"), (1, "09:00", "11:50")]
+    result = parse_timetable(make_timetable(classes, dark=True, cover_label_line=True, end_hour=20))
+    assert result["meta"]["grid_end"] == "20:00"
+    assert_close(as_set(result["classes"]), expected(classes))

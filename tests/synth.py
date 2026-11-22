@@ -36,8 +36,14 @@ def make_timetable(
     overlay_from_hour=None,
     fmt="PNG",
     dark=False,
+    tab_underline=False,
+    cover_label_line=False,
 ):
-    """classes: [(day_index, "10:30", "11:45"), ...] 또는 (day, start, end, color_index)."""
+    """classes: [(day_index, "10:30", "11:45"), ...] 또는 (day, start, end, color_index).
+
+    tab_underline: 학기 탭 밑줄처럼 격자 위에 얇은 가로선이 있는 캡처 (아이폰 캡처 형태)
+    cover_label_line: 월요일 블록이 시간 라벨 칸의 세로선까지 덮는 캡처
+    """
     grid_top = top + header_h
     grid_bottom = grid_top + (end_hour - start_hour) * hour_px
     height = grid_bottom + 240
@@ -66,6 +72,10 @@ def make_timetable(
         y = grid_top + h * hour_px
         d.line([0, y, width, y], fill=GRID, width=2)
     d.line([0, top, width, top], fill=GRID, width=2)  # 헤더 위 선
+    if tab_underline:  # 격자 윗선보다 한 칸(약 1시간) 가까이와 반 칸 위에 있는 얇은 선 (실제 아이폰 캡처에서 확인)
+        for dy in (hour_px * 0.95, hour_px * 0.9, hour_px * 0.46):
+            y = round(grid_top - dy)
+            d.line([0, y, width, y], fill=GRID, width=2)
     for i in range(days + 1):
         x = round(label_w + col_w * i)
         d.line([x, top, x, grid_bottom], fill=GRID, width=2)
@@ -80,6 +90,8 @@ def make_timetable(
         y1 = grid_top + (_to_min(end) - start_hour * 60) / 60 * hour_px
         # 실제 에브리타임처럼 블록은 세로선 안쪽, 시각 선보다 2px 아래에서 시작
         x0 = round(label_w + col_w * day) + 2
+        if cover_label_line and day == 0:
+            x0 = label_w - 4
         x1 = round(label_w + col_w * (day + 1)) - 2
         d.rectangle([x0, round(y0) + 2, x1, round(y1) - 1], fill=color)
         # 블록 안 흰 글자 (과목명 두 줄 + 강의실). 글자 하나 = 획 굵기 3px 사각형

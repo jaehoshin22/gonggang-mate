@@ -1,5 +1,10 @@
 # 외부 자료
 
+## 첫 화면 그림 (AI 생성)
+
+- 위치: `public/img/hero-people.webp`
+- 출처: ChatGPT(OpenAI)의 이미지 생성 기능으로 만든 그림. 외부 저작물을 가져온 것이 아니다.
+
 ## Lucide 아이콘
 
 - 위치: `public/img/icons.svg` (rotate-cw, arrow-right, info, share)
