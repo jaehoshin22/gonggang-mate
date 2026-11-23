@@ -52,7 +52,7 @@ function renderJoin() {
   const nameInput = $('#join-name');
   $('#join-name-field').hidden = friend; // 친구는 캡처를 먼저 받고, 이름은 카드에서 적는다
   $('#join-file').multiple = friend;
-  $('#join-file-sub').textContent = friend ? '여러 장을 한 번에 골라도 돼요' : '에브리타임 시간표 탭을 캡처해서 올려 주세요';
+  $('#join-file-sub').textContent = friend ? '여러 장을 한 번에 골라도 돼요' : '에브리타임 앱 → 아래 메뉴 \'시간표\' 탭을 캡처해 주세요';
   nameInput.placeholder = state.mode === 'solo' ? '내 이름' : '친구들이 알아볼 이름';
   if (!nameInput.value && me) nameInput.value = me;
   $('#join-error').hidden = true;
