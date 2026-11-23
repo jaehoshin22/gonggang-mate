@@ -293,6 +293,9 @@ body.home .app-header { background: transparent; border-bottom-color: transparen
   display: inline-flex; align-items: center; justify-content: center;
 }
 .chips button:active { background: var(--line); }
+.chips.readonly li { padding-right: 12px; } /* 빼기 버튼이 없는 이름표 (그룹 참여자 목록) */
+.chips.readonly li > .sub:last-child { margin-right: 0; }
+#group-people:empty { display: none; }
 .image-card { text-align: center; }
 .image-card img { display: block; width: 100%; max-height: 62vh; object-fit: contain; margin: 12px 0 8px; border: 1px solid var(--line); border-radius: 10px; }
 .image-card p { margin: 0; color: var(--muted); font-size: 13px; }

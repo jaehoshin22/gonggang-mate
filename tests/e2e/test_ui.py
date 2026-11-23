@@ -399,6 +399,9 @@ def test_group_same_name_blocked_unless_mine(ui, base_url):
     ui.wait("group")
     names = ui.page.evaluate("state.group.members.map(m => m.name)")
     assert sorted(names) == ["민지", "민지B"]
+    # 참여한 사람 목록이 이름표로 보이고, 이 기기에서 올린 내 이름에만 '나'가 붙는다
+    chips = ui.page.locator("#group-people li").all_inner_texts()
+    assert [c.replace("\n", " ").strip() for c in chips] == ["민지", "민지B 나"]
 
 
 def test_overlapping_classes_block_next_step(ui):

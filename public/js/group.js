@@ -84,6 +84,13 @@ function renderGroup() {
     ]),
   );
 
+  // 참여한 사람 목록 (혼자 비교하기와 같은 이름표, 이 기기에서 올린 내 이름에는 '나')
+  const mine = getMine(g.id);
+  $('#group-people').replaceChildren(...g.members.map((m) => el('li', {}, [
+    m.name,
+    mine && m.id === mine.memberId ? el('span', { class: 'sub', text: '나' }) : null,
+  ])));
+
   $('#my-action').replaceChildren(el('button', {
     class: `btn ${me ? 'btn-ghost' : 'btn-primary'}`, type: 'button',
     text: me ? `${me} 시간표 다시 올리기` : '내 시간표 올리기',
